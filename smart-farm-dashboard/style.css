@@ -1,0 +1,474 @@
+/* ============================================================
+   DESIGN TOKENS
+   Palette reads as field instrumentation, not generic "tech ui":
+   deep soil-green background, harvest-amber accent, clay-red for
+   attention states. Node 1 = teal (irrigation), Node 2 = amber
+   (harvest) so every chart/table stays legible without a legend.
+============================================================ */
+:root{
+  --bg:            #0F1912;
+  --bg-grid:       #12201716;
+  --surface:       #16241C;
+  --surface-raised:#1C2E22;
+  --border:        #2A4033;
+  --border-soft:   #22331F;
+
+  --text:          #ECF3EA;
+  --text-muted:    #93A899;
+  --text-faint:    #6B7E70;
+
+  --accent:        #E8A33D;   /* harvest amber        */
+  --accent-soft:   rgba(232,163,61,.14);
+
+  --node1:         #49B8B0;   /* Node 1 — teal / irrigation  */
+  --node1-soft:    rgba(73,184,176,.14);
+  --node2:         #E8A33D;   /* Node 2 — amber / harvest    */
+  --node2-soft:    rgba(232,163,61,.14);
+
+  --good:          #6FCF7A;
+  --good-soft:     rgba(111,207,122,.14);
+  --moderate:      #E8B23D;
+  --moderate-soft: rgba(232,178,61,.14);
+  --attention:     #E4572E;
+  --attention-soft:rgba(228,87,46,.16);
+
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-body:    'Inter', -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 20px;
+  --shadow-card: 0 1px 0 rgba(255,255,255,.02) inset, 0 10px 30px -18px rgba(0,0,0,.6);
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+
+body{
+  margin:0;
+  background:
+    radial-gradient(1100px 480px at 12% -10%, #16281C 0%, transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+
+h1,h2,h3{ font-family:var(--font-display); margin:0; letter-spacing:-0.01em; }
+
+a{ color:inherit; }
+
+:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  border-radius:4px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+}
+
+/* ============================================================
+   HEADER
+============================================================ */
+.site-header{
+  border-bottom:1px solid var(--border-soft);
+  background:linear-gradient(180deg, #132018 0%, var(--bg) 100%);
+}
+.header-inner{
+  max-width:1240px;
+  margin:0 auto;
+  padding:28px 28px 18px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:24px;
+  flex-wrap:wrap;
+}
+.brand{ display:flex; gap:14px; align-items:flex-start; }
+.brand-mark{
+  flex:none;
+  width:44px; height:44px;
+  border-radius:12px;
+  display:grid; place-items:center;
+  color:var(--good);
+  background:var(--good-soft);
+  border:1px solid var(--border);
+}
+.site-header h1{ font-size:clamp(20px,2.4vw,28px); font-weight:700; }
+.subtitle{
+  margin:4px 0 0;
+  color:var(--text-muted);
+  font-size:14px;
+}
+
+.header-status{ display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+.status-pill{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:7px 12px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  font-size:13px; font-weight:600;
+}
+.status-pill.is-connected{ color:var(--good); border-color:rgba(111,207,122,.35); }
+.status-pill.is-offline{ color:var(--attention); border-color:rgba(228,87,46,.35); }
+.status-dot{
+  width:8px; height:8px; border-radius:50%;
+  background:currentColor;
+  box-shadow:0 0 0 0 currentColor;
+  animation:pulse 2s ease-out infinite;
+}
+@keyframes pulse{
+  0%{ box-shadow:0 0 0 0 rgba(111,207,122,.45); }
+  70%{ box-shadow:0 0 0 7px rgba(111,207,122,0); }
+  100%{ box-shadow:0 0 0 0 rgba(111,207,122,0); }
+}
+.last-updated{ text-align:right; font-family:var(--font-mono); }
+.last-updated-label{ display:block; font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.08em; }
+.last-updated-time{ font-size:13px; color:var(--text-muted); }
+
+.pipeline-strip{
+  max-width:1240px;
+  margin:0 auto;
+  padding:0 28px 18px;
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--text-faint);
+}
+.pipeline-strip span{ color:var(--accent); }
+.pipeline-strip i{ font-style:normal; color:var(--border); }
+
+/* ============================================================
+   LAYOUT
+============================================================ */
+.dashboard{
+  max-width:1240px;
+  margin:0 auto;
+  padding:32px 28px 60px;
+  display:flex;
+  flex-direction:column;
+  gap:44px;
+}
+.section-heading{ margin-bottom:16px; }
+.section-heading h2{ font-size:19px; font-weight:600; }
+.section-sub{ margin:4px 0 0; color:var(--text-muted); font-size:13px; }
+
+/* ============================================================
+   NODE CARDS
+============================================================ */
+.node-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(360px,1fr));
+  gap:20px;
+}
+.node-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-l);
+  box-shadow:var(--shadow-card);
+  padding:20px 20px 22px;
+  border-top:3px solid transparent;
+}
+.node-card--n1{ border-top-color:var(--node1); }
+.node-card--n2{ border-top-color:var(--node2); }
+
+.node-card-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:16px;
+}
+.node-card-head h3{ font-size:16px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.node-tag{
+  width:9px; height:9px; border-radius:50%; display:inline-block;
+}
+.node-card--n1 .node-tag{ background:var(--node1); }
+.node-card--n2 .node-tag{ background:var(--node2); }
+
+.node-badge{
+  font-size:11px; font-weight:700;
+  padding:4px 9px; border-radius:999px;
+  font-family:var(--font-mono);
+  text-transform:uppercase; letter-spacing:.05em;
+}
+.node-badge.status-healthy{ color:var(--good); background:var(--good-soft); }
+.node-badge.status-moderate{ color:var(--moderate); background:var(--moderate-soft); }
+.node-badge.status-attention{ color:var(--attention); background:var(--attention-soft); }
+
+/* sensor grid */
+.sensor-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  margin-bottom:18px;
+}
+.sensor-tile{
+  background:var(--surface-raised);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-s);
+  padding:10px 10px 9px;
+}
+.sensor-tile .icon{
+  color:var(--text-faint);
+  width:16px; height:16px;
+  margin-bottom:6px;
+}
+.node-card--n1 .sensor-tile .icon{ color:var(--node1); }
+.node-card--n2 .sensor-tile .icon{ color:var(--node2); }
+.sensor-label{
+  display:block;
+  font-size:10.5px;
+  color:var(--text-muted);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin-bottom:2px;
+}
+.sensor-value{
+  font-family:var(--font-mono);
+  font-size:16px;
+  font-weight:700;
+  color:var(--text);
+}
+.sensor-value .unit{
+  font-size:11px;
+  font-weight:500;
+  color:var(--text-muted);
+  margin-left:2px;
+}
+
+/* ---- soil-core gauge (signature element) ----
+   A literal soil-core sample tube: a horizontal strata bar with a
+   flag marker at the score position. Reads as a field instrument,
+   not a generic progress ring. */
+.soil-core{
+  border-top:1px dashed var(--border);
+  padding-top:16px;
+}
+.soil-core-head{
+  display:flex; align-items:baseline; justify-content:space-between;
+  margin-bottom:10px;
+}
+.soil-core-head .label{ font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+.soil-core-head .score{ font-family:var(--font-mono); font-size:20px; font-weight:700; }
+.soil-core-head .score .of100{ font-size:12px; color:var(--text-faint); font-weight:500; }
+
+.soil-core-track{
+  position:relative;
+  height:14px;
+  border-radius:7px;
+  overflow:visible;
+  background:linear-gradient(90deg,
+    var(--attention) 0%, var(--attention) 30%,
+    var(--moderate) 30%, var(--moderate) 65%,
+    var(--good) 65%, var(--good) 100%);
+  opacity:.9;
+}
+.soil-core-track::before{
+  /* horizon striations, purely decorative texture on the strata bar */
+  content:"";
+  position:absolute; inset:0;
+  border-radius:7px;
+  background-image:repeating-linear-gradient(90deg, rgba(0,0,0,.16) 0 1px, transparent 1px 14px);
+  mix-blend-mode:multiply;
+}
+.soil-core-marker{
+  position:absolute;
+  top:-9px;
+  transform:translateX(-50%);
+  display:flex; flex-direction:column; align-items:center;
+  transition:left .5s ease;
+}
+.soil-core-marker .pin{
+  width:2px; height:30px;
+  background:var(--text);
+}
+.soil-core-marker .flag{
+  position:absolute; top:-8px; left:2px;
+  font-family:var(--font-mono);
+  font-size:10px; font-weight:700;
+  color:var(--bg);
+  background:var(--text);
+  padding:1px 5px;
+  border-radius:4px 4px 4px 0;
+  white-space:nowrap;
+}
+.soil-core-scale{
+  display:flex; justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-faint);
+  margin-top:14px;
+}
+
+/* ============================================================
+   FERTILIZER RECOMMENDATION
+============================================================ */
+.recommend-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(340px,1fr));
+  gap:20px;
+}
+.recommend-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-l);
+  padding:18px 20px;
+  display:flex; gap:14px; align-items:flex-start;
+}
+.recommend-card .rc-icon{
+  flex:none;
+  width:38px; height:38px;
+  border-radius:10px;
+  display:grid; place-items:center;
+}
+.recommend-card.status-healthy .rc-icon{ background:var(--good-soft); color:var(--good); }
+.recommend-card.status-moderate .rc-icon{ background:var(--moderate-soft); color:var(--moderate); }
+.recommend-card.status-attention .rc-icon{ background:var(--attention-soft); color:var(--attention); }
+.rc-node{ font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin:0 0 4px; }
+.rc-action{ font-size:15px; font-weight:600; margin:0 0 8px; }
+.rc-status{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em;
+  padding:3px 9px; border-radius:999px;
+}
+.status-healthy .rc-status{ color:var(--good); background:var(--good-soft); }
+.status-moderate .rc-status{ color:var(--moderate); background:var(--moderate-soft); }
+.status-attention .rc-status{ color:var(--attention); background:var(--attention-soft); }
+
+/* ============================================================
+   NPK VISUALIZATION
+============================================================ */
+.npk-panel{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-l);
+  padding:20px 22px;
+  display:flex; flex-direction:column; gap:18px;
+}
+.npk-row{ display:flex; flex-direction:column; gap:6px; }
+.npk-row-head{
+  display:flex; justify-content:space-between;
+  font-size:12.5px; color:var(--text-muted);
+}
+.npk-row-head .nutrient-name{ font-weight:600; color:var(--text); }
+.npk-bars{ display:flex; flex-direction:column; gap:5px; }
+.npk-bar-line{ display:flex; align-items:center; gap:10px; }
+.npk-bar-line .node-key{
+  flex:none; width:56px;
+  font-size:11px; font-family:var(--font-mono); color:var(--text-faint);
+}
+.npk-bar-track{
+  flex:1;
+  height:10px;
+  border-radius:6px;
+  background:var(--surface-raised);
+  border:1px solid var(--border-soft);
+  overflow:hidden;
+}
+.npk-bar-fill{
+  height:100%;
+  border-radius:6px 0 0 6px;
+  transition:width .6s ease;
+}
+.npk-bar-fill.n1{ background:linear-gradient(90deg, var(--node1), #6fd6cd); }
+.npk-bar-fill.n2{ background:linear-gradient(90deg, var(--node2), #f2c26f); }
+.npk-bar-value{
+  flex:none; width:44px; text-align:right;
+  font-family:var(--font-mono); font-size:12px; color:var(--text-muted);
+}
+
+/* ============================================================
+   ALERTS
+============================================================ */
+.alerts-list{
+  list-style:none; margin:0; padding:0;
+  display:flex; flex-direction:column; gap:8px;
+}
+.alert-item{
+  display:flex; align-items:flex-start; gap:10px;
+  padding:12px 14px;
+  border-radius:var(--radius-m);
+  border:1px solid var(--border);
+  background:var(--surface);
+  font-size:13.5px;
+}
+.alert-item .a-icon{ flex:none; font-family:var(--font-mono); font-weight:700; }
+.alert-item.warning{ border-color:rgba(228,87,46,.35); background:var(--attention-soft); }
+.alert-item.warning .a-icon{ color:var(--attention); }
+.alert-item.ok{ border-color:rgba(111,207,122,.3); background:var(--good-soft); }
+.alert-item.ok .a-icon{ color:var(--good); }
+.alert-item .a-node{ font-weight:700; margin-right:4px; }
+
+/* ============================================================
+   FARM COMPARISON TABLE
+============================================================ */
+.table-wrap{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-l);
+  overflow-x:auto;
+}
+.comparison-table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:480px;
+  font-size:14px;
+}
+.comparison-table th, .comparison-table td{
+  padding:12px 18px;
+  text-align:right;
+  border-bottom:1px solid var(--border-soft);
+}
+.comparison-table th:first-child, .comparison-table td:first-child{ text-align:left; color:var(--text-muted); }
+.comparison-table thead th{
+  font-family:var(--font-display);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:var(--text-muted);
+  text-align:right;
+}
+.comparison-table thead th:first-child{ text-align:left; }
+.comparison-table tbody td{ font-family:var(--font-mono); }
+.comparison-table tbody tr:last-child td{ border-bottom:none; }
+.node-swatch{
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  margin-right:6px;
+}
+.node-swatch.n1{ background:var(--node1); }
+.node-swatch.n2{ background:var(--node2); }
+
+/* ============================================================
+   FOOTER
+============================================================ */
+.site-footer{
+  border-top:1px solid var(--border-soft);
+  padding:22px 28px 40px;
+  text-align:center;
+  color:var(--text-faint);
+  font-size:12.5px;
+}
+.site-footer p{ margin:4px 0; }
+.footer-fine code{
+  font-family:var(--font-mono);
+  background:var(--surface-raised);
+  padding:1px 6px;
+  border-radius:4px;
+  color:var(--text-muted);
+}
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+@media (max-width:640px){
+  .header-inner{ flex-direction:column; }
+  .header-status{ align-items:flex-start; width:100%; }
+  .sensor-grid{ grid-template-columns:repeat(2,1fr); }
+  .comparison-table th, .comparison-table td{ padding:10px 12px; }
+}

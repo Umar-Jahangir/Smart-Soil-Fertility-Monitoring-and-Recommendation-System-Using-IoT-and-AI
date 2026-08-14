@@ -1,42 +1,42 @@
+#include <WiFi.h>
+#include <esp_now.h>
 #include <DHT.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// =====================================================
-// NODE 2 - PIN DEFINITIONS
-// =====================================================
+#define NODE_ID 2
 
+// ---------- SENSOR PINS ----------
 #define SOIL_MOISTURE_PIN 34
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
 #define DS18B20_PIN 5
-
-// =====================================================
-// SENSOR OBJECTS
-// =====================================================
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature soilTempSensor(&oneWire);
 
-// =====================================================
-// SENSOR DATA PACKET
-// This structure will later be sent using ESP-NOW
-// =====================================================
+// ---------- GATEWAY MAC ----------
+uint8_t gatewayMAC[] = {
+  0xFC, 0xE8, 0xC0, 0xE1, 0xD1, 0x38
+};
+
+// ---------- DATA PACKET ----------
 
 typedef struct {
 
   int nodeID;
 
-  // Real sensor data
   float moisture;
+
   float airTemperature;
-  float humidity;
+  float airHumidity;
+
   float soilTemperature;
 
-  // Simulated data for Mid-Sem
   float pH;
+
   float EC;
 
   float nitrogen;
@@ -45,12 +45,51 @@ typedef struct {
 
 } SensorData;
 
-// Create packet
 SensorData data;
 
-// =====================================================
-// SETUP
-// =====================================================
+// ---------- NODE 2 DEMO VALUES ----------
+
+float PH_VALUE = 6.80;
+float EC_VALUE = 1.42;
+
+float N_VALUE = 52.00;
+float P_VALUE = 29.00;
+float K_VALUE = 45.00;
+
+// ---------- SEND CALLBACK ----------
+
+void OnDataSent(
+  const wifi_tx_info_t *info,
+  esp_now_send_status_t status
+) {
+
+  Serial.print("ESP-NOW Send Status : ");
+
+  if (status == ESP_NOW_SEND_SUCCESS)
+    Serial.println("SUCCESS");
+  else
+    Serial.println("FAILED");
+}
+
+// ---------- SOIL MOISTURE ----------
+
+float readSoilMoisture() {
+
+  int rawValue = analogRead(SOIL_MOISTURE_PIN);
+
+  float moisture =
+    map(rawValue, 4095, 0, 0, 100);
+
+  if (moisture < 0)
+    moisture = 0;
+
+  if (moisture > 100)
+    moisture = 100;
+
+  return moisture;
+}
+
+// ---------- SETUP ----------
 
 void setup() {
 
@@ -60,162 +99,145 @@ void setup() {
 
   Serial.println();
   Serial.println("========================================");
-  Serial.println("        FARM MONITORING SYSTEM");
-  Serial.println("              NODE 2");
+  Serial.println("             ESP32 NODE 2");
   Serial.println("========================================");
 
-  // Initialize sensors
   dht.begin();
   soilTempSensor.begin();
 
-  pinMode(SOIL_MOISTURE_PIN, INPUT);
+  analogReadResolution(12);
 
-  Serial.println("Sensors initialized.");
-  Serial.println("Node 2 is ready.");
+  WiFi.mode(WIFI_STA);
+
+  Serial.print("Node 2 MAC Address: ");
+  Serial.println(WiFi.macAddress());
+
+  if (esp_now_init() != ESP_OK) {
+
+    Serial.println("ESP-NOW initialization FAILED!");
+    while (true) delay(1000);
+  }
+
+  esp_now_register_send_cb(OnDataSent);
+
+  esp_now_peer_info_t peerInfo = {};
+
+  memcpy(
+    peerInfo.peer_addr,
+    gatewayMAC,
+    6
+  );
+
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+
+    Serial.println("Failed to register Gateway!");
+    while (true) delay(1000);
+  }
+
   Serial.println();
+  Serial.println("ESP-NOW initialized.");
+  Serial.println("Gateway registered.");
+  Serial.println("Node 2 ready.");
+  Serial.println("========================================");
 }
 
-// =====================================================
-// LOOP
-// =====================================================
+// ---------- LOOP ----------
 
 void loop() {
 
-  // ===================================================
-  // 1. SOIL MOISTURE
-  // ===================================================
+  data.nodeID = NODE_ID;
 
-  int moistureRaw = analogRead(SOIL_MOISTURE_PIN);
+  data.moisture = readSoilMoisture();
 
-  // Preliminary conversion to percentage
-  int moisturePercent = map(
-    moistureRaw,
-    4095,
-    0,
-    0,
-    100
-  );
+  data.airTemperature =
+    dht.readTemperature();
 
-  moisturePercent = constrain(
-    moisturePercent,
-    0,
-    100
-  );
-
-
-  // ===================================================
-  // 2. DHT22
-  // Air Temperature + Humidity
-  // ===================================================
-
-  float airTemperature = dht.readTemperature();
-  float humidity = dht.readHumidity();
-
-
-  // ===================================================
-  // 3. DS18B20
-  // Soil Temperature
-  // ===================================================
+  data.airHumidity =
+    dht.readHumidity();
 
   soilTempSensor.requestTemperatures();
 
-  float soilTemperature =
+  data.soilTemperature =
     soilTempSensor.getTempCByIndex(0);
 
+  // ---------- DEMO VALUES ----------
 
-  // ===================================================
-  // 4. SIMULATED pH
-  // Will be replaced by real pH sensor later
-  // ===================================================
+  data.pH = PH_VALUE;
 
-  float simulatedPH = 5.4;
+  data.EC = EC_VALUE;
 
+  data.nitrogen = N_VALUE;
+  data.phosphorus = P_VALUE;
+  data.potassium = K_VALUE;
 
-  // ===================================================
-  // 5. SIMULATED EC
-  // Will be replaced by real EC sensor later
-  // ===================================================
+  // ---------- DISPLAY ----------
 
-  float simulatedEC = 2.10;
-
-
-  // ===================================================
-  // 6. SIMULATED NPK
-  // Will be replaced by real NPK sensor later
-  // ===================================================
-
-  float simulatedNitrogen = 22.0;
-  float simulatedPhosphorus = 18.0;
-  float simulatedPotassium = 20.0;
-
-
-  // ===================================================
-  // 7. CREATE DATA PACKET
-  // ===================================================
-
-  data.nodeID = 2;
-
-  // Real sensor values
-  data.moisture = moisturePercent;
-  data.airTemperature = airTemperature;
-  data.humidity = humidity;
-  data.soilTemperature = soilTemperature;
-
-  // Simulated values
-  data.pH = simulatedPH;
-  data.EC = simulatedEC;
-
-  data.nitrogen = simulatedNitrogen;
-  data.phosphorus = simulatedPhosphorus;
-  data.potassium = simulatedPotassium;
-
-
-  // ===================================================
-  // 8. DISPLAY COMPLETE PACKET
-  // ===================================================
-
-  Serial.println("========================================");
-  Serial.println("          NODE 2 DATA PACKET");
+  Serial.println();
   Serial.println("========================================");
 
   Serial.print("Node ID          : ");
   Serial.println(data.nodeID);
 
   Serial.print("Moisture         : ");
-  Serial.print(data.moisture);
+  Serial.print(data.moisture, 2);
   Serial.println(" %");
 
   Serial.print("Air Temperature  : ");
-  Serial.print(data.airTemperature);
-  Serial.println(" °C");
+
+  if (isnan(data.airTemperature))
+    Serial.println("ERROR");
+  else {
+    Serial.print(data.airTemperature, 2);
+    Serial.println(" °C");
+  }
 
   Serial.print("Air Humidity     : ");
-  Serial.print(data.humidity);
-  Serial.println(" %");
+
+  if (isnan(data.airHumidity))
+    Serial.println("ERROR");
+  else {
+    Serial.print(data.airHumidity, 2);
+    Serial.println(" %");
+  }
 
   Serial.print("Soil Temperature : ");
-  Serial.print(data.soilTemperature);
+  Serial.print(data.soilTemperature, 2);
   Serial.println(" °C");
 
   Serial.println("----------------------------------------");
 
   Serial.print("pH               : ");
-  Serial.println(data.pH);
+  Serial.println(data.pH, 2);
 
   Serial.print("EC               : ");
-  Serial.println(data.EC);
+  Serial.println(data.EC, 2);
 
   Serial.print("Nitrogen (N)     : ");
-  Serial.println(data.nitrogen);
+  Serial.println(data.nitrogen, 2);
 
   Serial.print("Phosphorus (P)   : ");
-  Serial.println(data.phosphorus);
+  Serial.println(data.phosphorus, 2);
 
   Serial.print("Potassium (K)    : ");
-  Serial.println(data.potassium);
+  Serial.println(data.potassium, 2);
 
   Serial.println("========================================");
-  Serial.println();
+
+  // ---------- SEND ----------
+
+  esp_err_t result = esp_now_send(
+    gatewayMAC,
+    (uint8_t *)&data,
+    sizeof(data)
+  );
+
+  if (result == ESP_OK)
+    Serial.println("Data packet sent to Gateway.");
+  else
+    Serial.println("Error sending packet.");
 
   delay(3000);
 }

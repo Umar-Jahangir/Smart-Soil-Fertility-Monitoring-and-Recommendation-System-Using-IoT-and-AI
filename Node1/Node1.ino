@@ -1,177 +1,80 @@
+#include <WiFi.h>
+#include <esp_now.h>
 #include <DHT.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// =====================================================
-// NODE ID
-// =====================================================
-
 #define NODE_ID 1
 
-
-// =====================================================
-// SENSOR PINS
-// =====================================================
-
-// Soil Moisture
+// ---------- SENSOR PINS ----------
 #define SOIL_MOISTURE_PIN 34
-
-// DHT22
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
-
-// DS18B20
 #define DS18B20_PIN 5
-
-// Analog pH Sensor
-#define PH_PIN 35
-
-
-// =====================================================
-// SENSOR OBJECTS
-// =====================================================
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
 OneWire oneWire(DS18B20_PIN);
-
 DallasTemperature soilTempSensor(&oneWire);
 
+// ---------- GATEWAY MAC ----------
+uint8_t gatewayMAC[] = {
+  0xFC, 0xE8, 0xC0, 0xE1, 0xD1, 0x38
+};
 
-// =====================================================
-// MID-SEM DEMO VALUES
-// =====================================================
+// ---------- DATA PACKET ----------
+typedef struct {
 
-// These will eventually be replaced by real sensors.
+  int nodeID;
 
+  float moisture;
+
+  float airTemperature;
+  float airHumidity;
+
+  float soilTemperature;
+
+  float pH;
+
+  float EC;
+
+  float nitrogen;
+  float phosphorus;
+  float potassium;
+
+} SensorData;
+
+SensorData data;
+
+// ---------- DEMO VALUES ----------
+float PH_VALUE = 9.15;
 float EC_VALUE = 1.35;
 
 float N_VALUE = 48.00;
 float P_VALUE = 32.00;
 float K_VALUE = 41.00;
 
+// ---------- SEND CALLBACK ----------
+void OnDataSent(
+  const wifi_tx_info_t *info,
+  esp_now_send_status_t status
+) {
 
-// =====================================================
-// pH CALIBRATION
-// =====================================================
+  Serial.print("ESP-NOW Send Status : ");
 
-// Reference obtained from your pH 7 buffer test.
-//
-// Average voltage ≈ 0.716 V
-//
-// For this mid-sem prototype we use the pH 7
-// reference as the calibration reference.
-
-float PH_REFERENCE_VOLTAGE = 0.716;
-
-
-// =====================================================
-// SETUP
-// =====================================================
-
-void setup() {
-
-  Serial.begin(115200);
-
-  delay(1000);
-
-  // ADC configuration
-  analogReadResolution(12);
-
-  // Start sensors
-  dht.begin();
-
-  soilTempSensor.begin();
-
-
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("          NODE 1 INITIALIZATION");
-  Serial.println("========================================");
-
-  Serial.println("Soil Moisture Sensor : OK");
-  Serial.println("DHT22                : OK");
-  Serial.println("DS18B20              : OK");
-  Serial.println("pH Sensor            : OK");
-
-  Serial.println("----------------------------------------");
-
-  Serial.println("Node 1 ready.");
-
-  Serial.println("========================================");
-
-  delay(2000);
+  if (status == ESP_NOW_SEND_SUCCESS)
+    Serial.println("SUCCESS");
+  else
+    Serial.println("FAILED");
 }
 
-
-// =====================================================
-// READ pH
-// =====================================================
-
-float readPH() {
-
-  const int NUM_SAMPLES = 20;
-
-  long totalADC = 0;
-
-  for (int i = 0; i < NUM_SAMPLES; i++) {
-
-    totalADC += analogRead(PH_PIN);
-
-    delay(10);
-  }
-
-  float averageADC =
-      (float)totalADC / NUM_SAMPLES;
-
-
-  // ESP32 ADC voltage
-  float voltage =
-      (averageADC / 4095.0) * 3.3;
-
-
-  // ---------------------------------------------------
-  // MID-SEM SINGLE-POINT CALIBRATION
-  // ---------------------------------------------------
-
-  // At the reference point:
-  //
-  // 0.716 V ≈ pH 7
-  //
-  // For now, we use a simple approximate relationship
-  // around the reference point.
-  //
-  // This will be replaced by proper two-point
-  // calibration when pH 4/10 buffer is available.
-
-  float pH = 7.0 + ((PH_REFERENCE_VOLTAGE - voltage) * 3.0);
-
-
-  // Keep pH within realistic range
-  if (pH < 0)
-    pH = 0;
-
-  if (pH > 14)
-    pH = 14;
-
-
-  return pH;
-}
-
-
-// =====================================================
-// READ SOIL MOISTURE
-// =====================================================
-
+// ---------- SOIL MOISTURE ----------
 float readSoilMoisture() {
 
   int rawValue = analogRead(SOIL_MOISTURE_PIN);
 
-  // Temporary conversion.
-  // We will calibrate this later using dry/wet values.
-
   float moisture =
-      map(rawValue, 4095, 0, 0, 100);
+    map(rawValue, 4095, 0, 0, 100);
 
   if (moisture < 0)
     moisture = 0;
@@ -182,110 +85,152 @@ float readSoilMoisture() {
   return moisture;
 }
 
+// ---------- SETUP ----------
+void setup() {
 
-// =====================================================
-// MAIN LOOP
-// =====================================================
+  Serial.begin(115200);
 
+  delay(1000);
+
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("             ESP32 NODE 1");
+  Serial.println("========================================");
+
+  dht.begin();
+  soilTempSensor.begin();
+
+  analogReadResolution(12);
+
+  WiFi.mode(WIFI_STA);
+
+  Serial.print("Node 1 MAC Address: ");
+  Serial.println(WiFi.macAddress());
+
+  if (esp_now_init() != ESP_OK) {
+
+    Serial.println("ESP-NOW initialization FAILED!");
+    while (true) delay(1000);
+  }
+
+  esp_now_register_send_cb(OnDataSent);
+
+  esp_now_peer_info_t peerInfo = {};
+
+  memcpy(
+    peerInfo.peer_addr,
+    gatewayMAC,
+    6
+  );
+
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+
+    Serial.println("Failed to register Gateway!");
+    while (true) delay(1000);
+  }
+
+  Serial.println();
+  Serial.println("ESP-NOW initialized.");
+  Serial.println("Gateway registered.");
+  Serial.println("Node 1 ready.");
+  Serial.println("========================================");
+}
+
+// ---------- LOOP ----------
 void loop() {
 
-  // ===================================================
-  // READ REAL SENSORS
-  // ===================================================
+  data.nodeID = NODE_ID;
 
-  float moisture =
-      readSoilMoisture();
+  data.moisture = readSoilMoisture();
 
+  data.airTemperature =
+    dht.readTemperature();
 
-  float airTemperature =
-      dht.readTemperature();
-
-
-  float airHumidity =
-      dht.readHumidity();
-
+  data.airHumidity =
+    dht.readHumidity();
 
   soilTempSensor.requestTemperatures();
 
-  float soilTemperature =
-      soilTempSensor.getTempCByIndex(0);
+  data.soilTemperature =
+    soilTempSensor.getTempCByIndex(0);
 
+  // Demo values
+  data.pH = PH_VALUE;
 
-  float pH =
-      readPH();
+  data.EC = EC_VALUE;
 
+  data.nitrogen = N_VALUE;
+  data.phosphorus = P_VALUE;
+  data.potassium = K_VALUE;
 
-  // ===================================================
-  // DISPLAY DATA
-  // ===================================================
+  // ---------- DISPLAY ----------
 
   Serial.println();
-
   Serial.println("========================================");
 
   Serial.print("Node ID          : ");
-  Serial.println(NODE_ID);
+  Serial.println(data.nodeID);
 
   Serial.print("Moisture         : ");
-  Serial.print(moisture, 2);
+  Serial.print(data.moisture, 2);
   Serial.println(" %");
 
   Serial.print("Air Temperature  : ");
 
-  if (isnan(airTemperature)) {
-
+  if (isnan(data.airTemperature))
     Serial.println("ERROR");
-
-  } else {
-
-    Serial.print(airTemperature, 2);
+  else {
+    Serial.print(data.airTemperature, 2);
     Serial.println(" °C");
   }
 
-
   Serial.print("Air Humidity     : ");
 
-  if (isnan(airHumidity)) {
-
+  if (isnan(data.airHumidity))
     Serial.println("ERROR");
-
-  } else {
-
-    Serial.print(airHumidity, 2);
+  else {
+    Serial.print(data.airHumidity, 2);
     Serial.println(" %");
   }
 
-
   Serial.print("Soil Temperature : ");
-  Serial.print(soilTemperature, 2);
+  Serial.print(data.soilTemperature, 2);
   Serial.println(" °C");
-
 
   Serial.println("----------------------------------------");
 
-
-  // ===================================================
-  // HARDCODED MID-SEM VALUES
-  // ===================================================
-
   Serial.print("pH               : ");
-  Serial.println(pH, 2);
+  Serial.println(data.pH, 2);
 
   Serial.print("EC               : ");
-  Serial.println(EC_VALUE, 2);
+  Serial.println(data.EC, 2);
 
   Serial.print("Nitrogen (N)     : ");
-  Serial.println(N_VALUE, 2);
+  Serial.println(data.nitrogen, 2);
 
   Serial.print("Phosphorus (P)   : ");
-  Serial.println(P_VALUE, 2);
+  Serial.println(data.phosphorus, 2);
 
   Serial.print("Potassium (K)    : ");
-  Serial.println(K_VALUE, 2);
-
+  Serial.println(data.potassium, 2);
 
   Serial.println("========================================");
 
+  // ---------- SEND ----------
+
+  esp_err_t result = esp_now_send(
+    gatewayMAC,
+    (uint8_t *)&data,
+    sizeof(data)
+  );
+
+  if (result == ESP_OK)
+    Serial.println("Data packet sent to Gateway.");
+  else
+    Serial.println("Error sending packet.");
 
   delay(3000);
 }

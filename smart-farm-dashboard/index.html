@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Farm Soil Monitoring System</title>
+
+<!-- Type system: Space Grotesk (display/technical), Inter (body/UI), JetBrains Mono (sensor data readouts) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       HEADER
+       Gateway status + last-updated time are populated by script.js
+       (#gatewayStatus, #lastUpdated) so they can later reflect a
+       real ESP-NOW / cloud connection state.
+  ============================================================ -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M12 2C12 2 6 8 6 13a6 6 0 0 0 12 0c0-5-6-11-6-11Z"/>
+            <path d="M12 22v-6"/>
+          </svg>
+        </span>
+        <div>
+          <h1>Smart Farm Soil Monitoring System</h1>
+          <p class="subtitle">Real-Time Multi-Node Soil Health Monitoring</p>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <div class="status-pill" id="gatewayStatus">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-text">Connecting…</span>
+        </div>
+        <div class="last-updated">
+          <span class="last-updated-label">Last updated</span>
+          <span class="last-updated-time" id="lastUpdated">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="pipeline-strip" aria-hidden="true">
+      <span>Monitor</span><i>→</i><span>Analyze</span><i>→</i><span>Recommend</span>
+    </div>
+  </header>
+
+  <main class="dashboard">
+
+    <!-- ============================================================
+         NODE OVERVIEW
+         Two empty shells (#node1Card / #node2Card). renderNodeCard()
+         in script.js fills sensor grid, soil-core gauge and status
+         badge from farmData at runtime — nothing is hardcoded here.
+    ============================================================ -->
+    <section class="section" aria-labelledby="nodeOverviewTitle">
+      <div class="section-heading">
+        <h2 id="nodeOverviewTitle">Node Overview</h2>
+        <p class="section-sub">Live readings from each ESP32 field node</p>
+      </div>
+
+      <div class="node-grid">
+        <article class="node-card node-card--n1" id="node1Card" data-node="node1">
+          <!-- filled by JS -->
+        </article>
+        <article class="node-card node-card--n2" id="node2Card" data-node="node2">
+          <!-- filled by JS -->
+        </article>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         FERTILIZER RECOMMENDATION
+    ============================================================ -->
+    <section class="section" aria-labelledby="fertilizerTitle">
+      <div class="section-heading">
+        <h2 id="fertilizerTitle">Fertilizer Recommendation</h2>
+        <p class="section-sub">Generated from current NPK, pH and moisture readings</p>
+      </div>
+      <div class="recommend-grid" id="recommendGrid">
+        <!-- filled by JS: renderRecommendation() -->
+      </div>
+    </section>
+
+    <!-- ============================================================
+         NPK VISUALIZATION
+    ============================================================ -->
+    <section class="section" aria-labelledby="npkTitle">
+      <div class="section-heading">
+        <h2 id="npkTitle">NPK Visualization</h2>
+        <p class="section-sub">Nitrogen · Phosphorus · Potassium — Node 1 vs Node 2 (mg/kg)</p>
+      </div>
+      <div class="npk-panel" id="npkPanel">
+        <!-- filled by JS: renderNPK() -->
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ALERTS
+    ============================================================ -->
+    <section class="section" aria-labelledby="alertsTitle">
+      <div class="section-heading">
+        <h2 id="alertsTitle">Alerts</h2>
+        <p class="section-sub">Generated dynamically from live thresholds</p>
+      </div>
+      <ul class="alerts-list" id="alertsList">
+        <!-- filled by JS: renderAlerts() -->
+      </ul>
+    </section>
+
+    <!-- ============================================================
+         FARM COMPARISON
+    ============================================================ -->
+    <section class="section" aria-labelledby="comparisonTitle">
+      <div class="section-heading">
+        <h2 id="comparisonTitle">Farm Comparison</h2>
+        <p class="section-sub">Side-by-side reading comparison, Node 1 vs Node 2</p>
+      </div>
+      <div class="table-wrap">
+        <table class="comparison-table" id="comparisonTable">
+          <thead>
+            <tr>
+              <th scope="col">Parameter</th>
+              <th scope="col"><span class="node-swatch n1"></span>Node 1</th>
+              <th scope="col"><span class="node-swatch n2"></span>Node 2</th>
+            </tr>
+          </thead>
+          <tbody id="comparisonBody">
+            <!-- filled by JS: renderComparison() -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>Sensors → ESP32 Node 1 / Node 2 → ESP32 Gateway (ESP-NOW) → Cloud → Web Dashboard</p>
+    <p class="footer-fine">Demo data layer active — see <code>script.js</code> for the cloud API integration point.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

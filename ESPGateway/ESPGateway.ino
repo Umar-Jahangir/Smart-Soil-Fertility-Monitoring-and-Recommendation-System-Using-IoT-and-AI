@@ -1,103 +1,173 @@
 #include <WiFi.h>
 #include <esp_now.h>
-#include "esp_wifi.h"
 
-// ===============================
+// =====================================================
 // DATA PACKET
-// ===============================
+// MUST BE IDENTICAL TO NODE 1 AND NODE 2
+// =====================================================
+
 typedef struct {
+
   int nodeID;
 
-  float soilMoisture;
+  float moisture;
+
   float airTemperature;
-  float humidity;
+  float airHumidity;
+
   float soilTemperature;
+
+  float pH;
+
+  float EC;
+
+  float nitrogen;
+  float phosphorus;
+  float potassium;
 
 } SensorData;
 
-SensorData receivedData;
+SensorData incomingData;
 
+// =====================================================
+// RECEIVE CALLBACK
+// =====================================================
 
-// ===============================
-// ESP-NOW RECEIVE CALLBACK
-// ===============================
-void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
+void OnDataRecv(
+  const esp_now_recv_info_t *info,
+  const uint8_t *incomingDataBytes,
+  int len
+) {
 
-  // Copy received data into our structure
-  memcpy(&receivedData, incomingData, sizeof(receivedData));
+  // Check packet size
+
+  if (len != sizeof(SensorData)) {
+
+    Serial.println();
+    Serial.println("WARNING: Packet size mismatch!");
+
+    return;
+  }
+
+  // Copy packet
+
+  memcpy(
+    &incomingData,
+    incomingDataBytes,
+    sizeof(incomingData)
+  );
+
+  // ===================================================
+  // DISPLAY
+  // ===================================================
 
   Serial.println();
-  Serial.println("================================");
-  Serial.println("       DATA RECEIVED");
-  Serial.println("================================");
+  Serial.println("========================================");
+
+  if (incomingData.nodeID == 1) {
+
+    Serial.println("          DATA FROM NODE 1");
+
+  }
+  else if (incomingData.nodeID == 2) {
+
+    Serial.println("          DATA FROM NODE 2");
+
+  }
+  else {
+
+    Serial.print("          DATA FROM NODE ");
+    Serial.println(incomingData.nodeID);
+  }
+
+  Serial.println("========================================");
 
   Serial.print("Node ID          : ");
-  Serial.println(receivedData.nodeID);
+  Serial.println(incomingData.nodeID);
 
-  Serial.print("Soil Moisture    : ");
-  Serial.print(receivedData.soilMoisture);
+  Serial.print("Moisture         : ");
+  Serial.print(incomingData.moisture, 2);
   Serial.println(" %");
 
   Serial.print("Air Temperature  : ");
-  Serial.print(receivedData.airTemperature);
+  Serial.print(incomingData.airTemperature, 2);
   Serial.println(" °C");
 
-  Serial.print("Humidity         : ");
-  Serial.print(receivedData.humidity);
+  Serial.print("Air Humidity     : ");
+  Serial.print(incomingData.airHumidity, 2);
   Serial.println(" %");
 
   Serial.print("Soil Temperature : ");
-  Serial.print(receivedData.soilTemperature);
+  Serial.print(incomingData.soilTemperature, 2);
   Serial.println(" °C");
 
-  Serial.println("================================");
+  Serial.println("----------------------------------------");
+
+  Serial.print("pH               : ");
+  Serial.println(incomingData.pH, 2);
+
+  Serial.print("EC               : ");
+  Serial.println(incomingData.EC, 2);
+
+  Serial.print("Nitrogen (N)     : ");
+  Serial.println(incomingData.nitrogen, 2);
+
+  Serial.print("Phosphorus (P)   : ");
+  Serial.println(incomingData.phosphorus, 2);
+
+  Serial.print("Potassium (K)    : ");
+  Serial.println(incomingData.potassium, 2);
+
+  Serial.println("========================================");
 }
 
-
-// ===============================
+// =====================================================
 // SETUP
-// ===============================
+// =====================================================
+
 void setup() {
 
   Serial.begin(115200);
+
   delay(1000);
 
-  // Wi-Fi Station mode
-  WiFi.mode(WIFI_STA);
-
-  // Keep ESP-NOW devices on the same Wi-Fi channel
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-
   Serial.println();
-  Serial.println("================================");
-  Serial.println("       ESP32 GATEWAY");
-  Serial.println("================================");
+  Serial.println("========================================");
+  Serial.println("             ESP32 GATEWAY");
+  Serial.println("========================================");
+
+  WiFi.mode(WIFI_STA);
 
   Serial.print("Gateway MAC Address: ");
   Serial.println(WiFi.macAddress());
 
-  // Initialize ESP-NOW
+  // ===================================================
+  // INITIALIZE ESP-NOW
+  // ===================================================
+
   if (esp_now_init() != ESP_OK) {
+
     Serial.println("ESP-NOW initialization FAILED!");
-    return;
+
+    while (true) {
+      delay(1000);
+    }
   }
 
-  Serial.println("ESP-NOW initialized successfully.");
-
-  // Register receive callback
   esp_now_register_recv_cb(OnDataRecv);
 
-  Serial.println("Gateway is waiting for Node 1...");
-  Serial.println("================================");
+  Serial.println();
+  Serial.println("ESP-NOW initialized.");
+  Serial.println("Gateway is ready.");
+  Serial.println("Waiting for Node 1 and Node 2...");
+  Serial.println("========================================");
 }
 
-
-// ===============================
+// =====================================================
 // LOOP
-// ===============================
+// =====================================================
+
 void loop() {
 
-  // Nothing needed here.
-  // ESP-NOW receives data automatically.
-
+  delay(100);
 }
