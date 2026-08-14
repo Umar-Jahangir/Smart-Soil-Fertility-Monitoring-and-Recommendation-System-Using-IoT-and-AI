@@ -64,7 +64,15 @@ const farmData = {
    so making this function real (and async) is the entire migration.
 ------------------------------------------------------------------- */
 async function fetchFarmData() {
-  return farmData;
+    const response = await fetch(
+        "http://127.0.0.1:8000/api/farm-data"
+    );
+
+    if (!response.ok) {
+        throw new Error("Failed to fetch farm data");
+    }
+
+    return await response.json();
 }
 
 
@@ -418,6 +426,8 @@ async function updateDashboard() {
 
 document.addEventListener('DOMContentLoaded', () => {
   updateDashboard();
+
+  setInterval(updateDashboard, 5000);
 
   // Example of future live polling once fetchFarmData() hits a real API:
   // setInterval(updateDashboard, 30000);
