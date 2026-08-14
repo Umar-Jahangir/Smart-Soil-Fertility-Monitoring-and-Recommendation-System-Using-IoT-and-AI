@@ -304,6 +304,27 @@ a{ color:inherit; }
   margin-top:14px;
 }
 
+
+/* Connection Indicator................................................................................. */
+
+.connection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+
+.connection-live {
+    color: #16a34a;
+    font-weight: 700;
+}
+
+.connection-offline {
+    color: #dc2626;
+    font-weight: 700;
+}
+
 /* ============================================================
    FERTILIZER RECOMMENDATION
 ============================================================ */

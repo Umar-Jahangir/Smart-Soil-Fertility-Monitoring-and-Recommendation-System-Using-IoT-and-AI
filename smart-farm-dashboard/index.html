@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Smart Farm Soil Monitoring System</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Farm Soil Monitoring System</title>
 
-<!-- Type system: Space Grotesk (display/technical), Inter (body/UI), JetBrains Mono (sensor data readouts) -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Type system: Space Grotesk (display/technical), Inter (body/UI), JetBrains Mono (sensor data readouts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
 
-<link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
 
   <!-- ============================================================
@@ -25,8 +29,8 @@
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6">
-            <path d="M12 2C12 2 6 8 6 13a6 6 0 0 0 12 0c0-5-6-11-6-11Z"/>
-            <path d="M12 22v-6"/>
+            <path d="M12 2C12 2 6 8 6 13a6 6 0 0 0 12 0c0-5-6-11-6-11Z" />
+            <path d="M12 22v-6" />
           </svg>
         </span>
         <div>
@@ -49,7 +53,18 @@
     <div class="pipeline-strip" aria-hidden="true">
       <span>Monitor</span><i>→</i><span>Analyze</span><i>→</i><span>Recommend</span>
     </div>
+    <div class="connection-indicator">
+      <span id="connection-status" class="connection-offline">
+        ● OFFLINE
+      </span>
+
+      <span id="last-updated">
+        Waiting for data...
+      </span>
+    </div>
   </header>
+
+
 
   <main class="dashboard">
 
@@ -147,4 +162,5 @@
 
   <script src="script.js"></script>
 </body>
+
 </html>
