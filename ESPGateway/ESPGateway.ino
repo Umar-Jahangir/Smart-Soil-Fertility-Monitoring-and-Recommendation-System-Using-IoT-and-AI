@@ -1,12 +1,19 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-// =====================================================
-// DATA PACKET
-// MUST BE IDENTICAL TO NODE 1 AND NODE 2
-// =====================================================
+// ======================================================
+// Wi-Fi Credentials
+// ======================================================
 
-typedef struct {
+const char* ssid = "faria";
+const char* password = "stuff0609";
+
+// ======================================================
+// Data structure received from Nodes
+// MUST match the Node 1 and Node 2 structure
+// ======================================================
+
+typedef struct struct_message {
 
   int nodeID;
 
@@ -18,72 +25,39 @@ typedef struct {
   float soilTemperature;
 
   float pH;
-
-  float EC;
+  float ec;
 
   float nitrogen;
   float phosphorus;
   float potassium;
 
-} SensorData;
+} struct_message;
 
-SensorData incomingData;
+struct_message incomingData;
 
-// =====================================================
-// RECEIVE CALLBACK
-// =====================================================
 
-void OnDataRecv(
-  const esp_now_recv_info_t *info,
-  const uint8_t *incomingDataBytes,
-  int len
-) {
+// ======================================================
+// ESP-NOW RECEIVE CALLBACK
+// ======================================================
 
-  // Check packet size
+void OnDataRecv(const esp_now_recv_info_t *recv_info,
+                const uint8_t *incomingDataBytes,
+                int len) {
 
-  if (len != sizeof(SensorData)) {
-
-    Serial.println();
-    Serial.println("WARNING: Packet size mismatch!");
-
+  if (len != sizeof(incomingData)) {
+    Serial.println("Received packet size mismatch!");
     return;
   }
 
-  // Copy packet
-
-  memcpy(
-    &incomingData,
-    incomingDataBytes,
-    sizeof(incomingData)
-  );
-
-  // ===================================================
-  // DISPLAY
-  // ===================================================
+  memcpy(&incomingData, incomingDataBytes, sizeof(incomingData));
 
   Serial.println();
   Serial.println("========================================");
 
-  if (incomingData.nodeID == 1) {
-
-    Serial.println("          DATA FROM NODE 1");
-
-  }
-  else if (incomingData.nodeID == 2) {
-
-    Serial.println("          DATA FROM NODE 2");
-
-  }
-  else {
-
-    Serial.print("          DATA FROM NODE ");
-    Serial.println(incomingData.nodeID);
-  }
-
-  Serial.println("========================================");
-
-  Serial.print("Node ID          : ");
+  Serial.print("Data received from Node ");
   Serial.println(incomingData.nodeID);
+
+  Serial.println("----------------------------------------");
 
   Serial.print("Moisture         : ");
   Serial.print(incomingData.moisture, 2);
@@ -107,7 +81,7 @@ void OnDataRecv(
   Serial.println(incomingData.pH, 2);
 
   Serial.print("EC               : ");
-  Serial.println(incomingData.EC, 2);
+  Serial.println(incomingData.ec, 2);
 
   Serial.print("Nitrogen (N)     : ");
   Serial.println(incomingData.nitrogen, 2);
@@ -121,53 +95,142 @@ void OnDataRecv(
   Serial.println("========================================");
 }
 
-// =====================================================
+
+// ======================================================
+// CONNECT TO WI-FI
+// ======================================================
+
+void connectToWiFi() {
+
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("        CONNECTING TO WI-FI");
+  Serial.println("========================================");
+
+  Serial.print("Network: ");
+  Serial.println(ssid);
+
+  WiFi.mode(WIFI_STA);
+
+  WiFi.begin(ssid, password);
+
+  int attempts = 0;
+
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+
+    delay(500);
+
+    Serial.print(".");
+
+    attempts++;
+  }
+
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+
+    Serial.println("Wi-Fi connected!");
+
+    Serial.print("IP Address : ");
+    Serial.println(WiFi.localIP());
+
+    Serial.print("Wi-Fi MAC  : ");
+    Serial.println(WiFi.macAddress());
+
+    Serial.print("Wi-Fi Channel : ");
+    Serial.println(WiFi.channel());
+
+    Serial.println("========================================");
+
+  } else {
+
+    Serial.println("Wi-Fi connection FAILED.");
+
+    Serial.println("Check:");
+    Serial.println("1. Android hotspot is ON");
+    Serial.println("2. SSID is AndroidAP");
+    Serial.println("3. Password is correct");
+
+    Serial.println("========================================");
+  }
+}
+
+
+// ======================================================
 // SETUP
-// =====================================================
+// ======================================================
 
 void setup() {
 
   Serial.begin(115200);
 
-  delay(1000);
+  delay(2000);
 
   Serial.println();
   Serial.println("========================================");
-  Serial.println("             ESP32 GATEWAY");
+  Serial.println("           ESP32 GATEWAY");
   Serial.println("========================================");
+
+  // ----------------------------------------------------
+  // Start Wi-Fi
+  // ----------------------------------------------------
 
   WiFi.mode(WIFI_STA);
 
   Serial.print("Gateway MAC Address: ");
   Serial.println(WiFi.macAddress());
 
-  // ===================================================
-  // INITIALIZE ESP-NOW
-  // ===================================================
+  // ----------------------------------------------------
+  // Start ESP-NOW
+  // ----------------------------------------------------
 
   if (esp_now_init() != ESP_OK) {
 
     Serial.println("ESP-NOW initialization FAILED!");
 
-    while (true) {
-      delay(1000);
-    }
+    return;
   }
+
+  Serial.println("ESP-NOW initialized.");
 
   esp_now_register_recv_cb(OnDataRecv);
 
+  // ----------------------------------------------------
+  // Connect Gateway to Android Hotspot
+  // ----------------------------------------------------
+
+  connectToWiFi();
+
   Serial.println();
-  Serial.println("ESP-NOW initialized.");
   Serial.println("Gateway is ready.");
-  Serial.println("Waiting for Node 1 and Node 2...");
   Serial.println("========================================");
 }
 
-// =====================================================
+
+// ======================================================
 // LOOP
-// =====================================================
+// ======================================================
 
 void loop() {
+
+  // Keep Wi-Fi connection alive
+
+  if (WiFi.status() != WL_CONNECTED) {
+
+    static unsigned long lastReconnectAttempt = 0;
+
+    if (millis() - lastReconnectAttempt > 10000) {
+
+      lastReconnectAttempt = millis();
+
+      Serial.println();
+      Serial.println("Wi-Fi disconnected.");
+      Serial.println("Attempting reconnection...");
+
+      WiFi.disconnect();
+      WiFi.begin(ssid, password);
+    }
+  }
 
   delay(100);
 }
