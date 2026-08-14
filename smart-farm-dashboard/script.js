@@ -327,44 +327,20 @@ function generateAlerts(data) {
 
     const alerts = [];
 
-
     Object.keys(data).forEach(nodeKey => {
 
         const nodeData = data[nodeKey];
+        const label = NODE_LABELS[nodeKey];
 
-        const label =
-            NODE_LABELS[nodeKey];
-
-        let anyWarning = false;
+        let warningCount = 0;
 
 
-        /* pH */
-
-        const ph =
-            METRICS.find(m => m.key === "pH");
-
-        if (
-            nodeData.pH < ph.min ||
-            nodeData.pH > ph.max
-        ) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    "Soil pH is outside the recommended range."
-            });
-
-            anyWarning = true;
-        }
-
-
-        /* Moisture */
+        /* =========================================================
+           SOIL MOISTURE
+        ========================================================= */
 
         const moisture =
-            METRICS.find(
-                m => m.key === "moisture"
-            );
+            METRICS.find(m => m.key === "moisture");
 
         if (nodeData.moisture < moisture.min) {
 
@@ -372,102 +348,196 @@ function generateAlerts(data) {
                 node: label,
                 type: "warning",
                 message:
-                    "Soil moisture is low."
+                    `Soil moisture is low (${nodeData.moisture.toFixed(1)}%). Irrigation may be required.`
             });
 
-            anyWarning = true;
+            warningCount++;
 
-        } else if (
-            nodeData.moisture > moisture.max
-        ) {
+        } else if (nodeData.moisture > moisture.max) {
 
             alerts.push({
                 node: label,
                 type: "warning",
                 message:
-                    "Soil moisture is high."
+                    `Soil moisture is high (${nodeData.moisture.toFixed(1)}%). Check for over-irrigation.`
             });
 
-            anyWarning = true;
+            warningCount++;
         }
 
 
-        /* EC */
+        /* =========================================================
+           SOIL pH
+        ========================================================= */
+
+        const ph =
+            METRICS.find(m => m.key === "pH");
+
+        if (nodeData.pH < ph.min) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `Soil pH is too low (${nodeData.pH.toFixed(2)}). Consider measures to increase soil pH.`
+            });
+
+            warningCount++;
+
+        } else if (nodeData.pH > ph.max) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `Soil pH is too high (${nodeData.pH.toFixed(2)}). Consider measures to reduce soil pH.`
+            });
+
+            warningCount++;
+        }
+
+
+        /* =========================================================
+           ELECTRICAL CONDUCTIVITY
+        ========================================================= */
 
         const ec =
+            METRICS.find(m => m.key === "ec");
+
+        if (nodeData.ec < ec.min) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `EC is low (${nodeData.ec.toFixed(2)} dS/m). Nutrient availability may be low.`
+            });
+
+            warningCount++;
+
+        } else if (nodeData.ec > ec.max) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `EC is high (${nodeData.ec.toFixed(2)} dS/m). Possible excess salts or fertilizer concentration.`
+            });
+
+            warningCount++;
+        }
+
+
+        /* =========================================================
+           NITROGEN
+        ========================================================= */
+
+        const nitrogen =
+            METRICS.find(m => m.key === "nitrogen");
+
+        if (nodeData.nitrogen < nitrogen.min) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `Nitrogen level is low (${nodeData.nitrogen.toFixed(0)} mg/kg).`
+            });
+
+            warningCount++;
+
+        }
+
+
+        /* =========================================================
+           PHOSPHORUS
+        ========================================================= */
+
+        const phosphorus =
+            METRICS.find(m => m.key === "phosphorus");
+
+        if (nodeData.phosphorus < phosphorus.min) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `Phosphorus level is low (${nodeData.phosphorus.toFixed(0)} mg/kg).`
+            });
+
+            warningCount++;
+
+        }
+
+
+        /* =========================================================
+           POTASSIUM
+        ========================================================= */
+
+        const potassium =
+            METRICS.find(m => m.key === "potassium");
+
+        if (nodeData.potassium < potassium.min) {
+
+            alerts.push({
+                node: label,
+                type: "warning",
+                message:
+                    `Potassium level is low (${nodeData.potassium.toFixed(0)} mg/kg).`
+            });
+
+            warningCount++;
+
+        }
+
+
+        /* =========================================================
+           SOIL TEMPERATURE
+        ========================================================= */
+
+        const soilTemperature =
             METRICS.find(
-                m => m.key === "ec"
+                m => m.key === "soilTemperature"
             );
 
+        /*
+           Ignore -127 °C because this is the DS18B20
+           disconnected/error value you observed during
+           testing. It should not create a false alert.
+        */
+
         if (
-            nodeData.ec < ec.min ||
-            nodeData.ec > ec.max
+            nodeData.soilTemperature !== -127 &&
+            (
+                nodeData.soilTemperature < soilTemperature.min ||
+                nodeData.soilTemperature > soilTemperature.max
+            )
         ) {
 
             alerts.push({
                 node: label,
                 type: "warning",
                 message:
-                    "Electrical conductivity is outside range."
+                    `Soil temperature is outside the target range (${nodeData.soilTemperature.toFixed(1)} °C).`
             });
 
-            anyWarning = true;
+            warningCount++;
         }
 
 
-        /* NPK */
+        /* =========================================================
+           ALL PARAMETERS NORMAL
+        ========================================================= */
 
-        const npkOk =
-            [
-                "nitrogen",
-                "phosphorus",
-                "potassium"
-            ].every(key => {
-
-                const metric =
-                    METRICS.find(
-                        m => m.key === key
-                    );
-
-                return (
-                    nodeData[key] >= metric.min &&
-                    nodeData[key] <= metric.max
-                );
-            });
-
-
-        if (!npkOk) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    "One or more NPK levels are outside range."
-            });
-
-            anyWarning = true;
-
-        } else {
+        if (warningCount === 0) {
 
             alerts.push({
                 node: label,
                 type: "ok",
                 message:
-                    "NPK levels are currently acceptable."
+                    "All monitored soil parameters are within the recommended range."
             });
-        }
 
-
-        /* All OK */
-
-        if (!anyWarning) {
-
-            alerts.push({
-                node: label,
-                type: "ok",
-                message:
-                    "All readings within normal range."
-            });
         }
 
     });
