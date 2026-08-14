@@ -3,13 +3,29 @@
 #include <DallasTemperature.h>
 
 // =====================================================
-// NODE 1 - PIN DEFINITIONS
+// NODE ID
 // =====================================================
 
+#define NODE_ID 1
+
+
+// =====================================================
+// SENSOR PINS
+// =====================================================
+
+// Soil Moisture
 #define SOIL_MOISTURE_PIN 34
+
+// DHT22
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
+
+// DS18B20
 #define DS18B20_PIN 5
+
+// Analog pH Sensor
+#define PH_PIN 35
+
 
 // =====================================================
 // SENSOR OBJECTS
@@ -18,35 +34,36 @@
 DHT dht(DHT_PIN, DHT_TYPE);
 
 OneWire oneWire(DS18B20_PIN);
+
 DallasTemperature soilTempSensor(&oneWire);
 
+
 // =====================================================
-// SENSOR DATA PACKET
-// This structure will later be sent using ESP-NOW
+// MID-SEM DEMO VALUES
 // =====================================================
 
-typedef struct {
+// These will eventually be replaced by real sensors.
 
-  int nodeID;
+float EC_VALUE = 1.35;
 
-  // Real sensor data
-  float moisture;
-  float airTemperature;
-  float humidity;
-  float soilTemperature;
+float N_VALUE = 48.00;
+float P_VALUE = 32.00;
+float K_VALUE = 41.00;
 
-  // Simulated data for Mid-Sem
-  float pH;
-  float EC;
 
-  float nitrogen;
-  float phosphorus;
-  float potassium;
+// =====================================================
+// pH CALIBRATION
+// =====================================================
 
-} SensorData;
+// Reference obtained from your pH 7 buffer test.
+//
+// Average voltage ≈ 0.716 V
+//
+// For this mid-sem prototype we use the pH 7
+// reference as the calibration reference.
 
-// Create packet
-SensorData data;
+float PH_REFERENCE_VOLTAGE = 0.716;
+
 
 // =====================================================
 // SETUP
@@ -58,164 +75,217 @@ void setup() {
 
   delay(1000);
 
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("        FARM MONITORING SYSTEM");
-  Serial.println("              NODE 1");
-  Serial.println("========================================");
+  // ADC configuration
+  analogReadResolution(12);
 
-  // Initialize sensors
+  // Start sensors
   dht.begin();
+
   soilTempSensor.begin();
 
-  pinMode(SOIL_MOISTURE_PIN, INPUT);
 
-  Serial.println("Sensors initialized.");
-  Serial.println("Node 1 is ready.");
   Serial.println();
+  Serial.println("========================================");
+  Serial.println("          NODE 1 INITIALIZATION");
+  Serial.println("========================================");
+
+  Serial.println("Soil Moisture Sensor : OK");
+  Serial.println("DHT22                : OK");
+  Serial.println("DS18B20              : OK");
+  Serial.println("pH Sensor            : OK");
+
+  Serial.println("----------------------------------------");
+
+  Serial.println("Node 1 ready.");
+
+  Serial.println("========================================");
+
+  delay(2000);
 }
 
+
 // =====================================================
-// LOOP
+// READ pH
+// =====================================================
+
+float readPH() {
+
+  const int NUM_SAMPLES = 20;
+
+  long totalADC = 0;
+
+  for (int i = 0; i < NUM_SAMPLES; i++) {
+
+    totalADC += analogRead(PH_PIN);
+
+    delay(10);
+  }
+
+  float averageADC =
+      (float)totalADC / NUM_SAMPLES;
+
+
+  // ESP32 ADC voltage
+  float voltage =
+      (averageADC / 4095.0) * 3.3;
+
+
+  // ---------------------------------------------------
+  // MID-SEM SINGLE-POINT CALIBRATION
+  // ---------------------------------------------------
+
+  // At the reference point:
+  //
+  // 0.716 V ≈ pH 7
+  //
+  // For now, we use a simple approximate relationship
+  // around the reference point.
+  //
+  // This will be replaced by proper two-point
+  // calibration when pH 4/10 buffer is available.
+
+  float pH = 7.0 + ((PH_REFERENCE_VOLTAGE - voltage) * 3.0);
+
+
+  // Keep pH within realistic range
+  if (pH < 0)
+    pH = 0;
+
+  if (pH > 14)
+    pH = 14;
+
+
+  return pH;
+}
+
+
+// =====================================================
+// READ SOIL MOISTURE
+// =====================================================
+
+float readSoilMoisture() {
+
+  int rawValue = analogRead(SOIL_MOISTURE_PIN);
+
+  // Temporary conversion.
+  // We will calibrate this later using dry/wet values.
+
+  float moisture =
+      map(rawValue, 4095, 0, 0, 100);
+
+  if (moisture < 0)
+    moisture = 0;
+
+  if (moisture > 100)
+    moisture = 100;
+
+  return moisture;
+}
+
+
+// =====================================================
+// MAIN LOOP
 // =====================================================
 
 void loop() {
 
   // ===================================================
-  // 1. SOIL MOISTURE
+  // READ REAL SENSORS
   // ===================================================
 
-  int moistureRaw = analogRead(SOIL_MOISTURE_PIN);
-
-  // Preliminary conversion to percentage
-  int moisturePercent = map(
-    moistureRaw,
-    4095,
-    0,
-    0,
-    100
-  );
-
-  moisturePercent = constrain(
-    moisturePercent,
-    0,
-    100
-  );
+  float moisture =
+      readSoilMoisture();
 
 
-  // ===================================================
-  // 2. DHT22
-  // Air Temperature + Humidity
-  // ===================================================
-
-  float airTemperature = dht.readTemperature();
-  float humidity = dht.readHumidity();
+  float airTemperature =
+      dht.readTemperature();
 
 
-  // ===================================================
-  // 3. DS18B20
-  // Soil Temperature
-  // ===================================================
+  float airHumidity =
+      dht.readHumidity();
+
 
   soilTempSensor.requestTemperatures();
 
   float soilTemperature =
-    soilTempSensor.getTempCByIndex(0);
+      soilTempSensor.getTempCByIndex(0);
+
+
+  float pH =
+      readPH();
 
 
   // ===================================================
-  // 4. SIMULATED pH
-  // Will be replaced by real pH sensor later
+  // DISPLAY DATA
   // ===================================================
 
-  float simulatedPH = 6.4;
+  Serial.println();
 
-
-  // ===================================================
-  // 5. SIMULATED EC
-  // Will be replaced by real EC sensor later
-  // ===================================================
-
-  float simulatedEC = 1.35;
-
-
-  // ===================================================
-  // 6. SIMULATED NPK
-  // Will be replaced by real NPK sensor later
-  // ===================================================
-
-  float simulatedNitrogen = 48.0;
-  float simulatedPhosphorus = 32.0;
-  float simulatedPotassium = 41.0;
-
-
-  // ===================================================
-  // 7. CREATE DATA PACKET
-  // ===================================================
-
-  data.nodeID = 1;
-
-  // Real sensor values
-  data.moisture = moisturePercent;
-  data.airTemperature = airTemperature;
-  data.humidity = humidity;
-  data.soilTemperature = soilTemperature;
-
-  // Simulated values
-  data.pH = simulatedPH;
-  data.EC = simulatedEC;
-
-  data.nitrogen = simulatedNitrogen;
-  data.phosphorus = simulatedPhosphorus;
-  data.potassium = simulatedPotassium;
-
-
-  // ===================================================
-  // 8. DISPLAY COMPLETE PACKET
-  // ===================================================
-
-  Serial.println("========================================");
-  Serial.println("          NODE 1 DATA PACKET");
   Serial.println("========================================");
 
   Serial.print("Node ID          : ");
-  Serial.println(data.nodeID);
+  Serial.println(NODE_ID);
 
   Serial.print("Moisture         : ");
-  Serial.print(data.moisture);
+  Serial.print(moisture, 2);
   Serial.println(" %");
 
   Serial.print("Air Temperature  : ");
-  Serial.print(data.airTemperature);
-  Serial.println(" °C");
+
+  if (isnan(airTemperature)) {
+
+    Serial.println("ERROR");
+
+  } else {
+
+    Serial.print(airTemperature, 2);
+    Serial.println(" °C");
+  }
+
 
   Serial.print("Air Humidity     : ");
-  Serial.print(data.humidity);
-  Serial.println(" %");
+
+  if (isnan(airHumidity)) {
+
+    Serial.println("ERROR");
+
+  } else {
+
+    Serial.print(airHumidity, 2);
+    Serial.println(" %");
+  }
+
 
   Serial.print("Soil Temperature : ");
-  Serial.print(data.soilTemperature);
+  Serial.print(soilTemperature, 2);
   Serial.println(" °C");
+
 
   Serial.println("----------------------------------------");
 
+
+  // ===================================================
+  // HARDCODED MID-SEM VALUES
+  // ===================================================
+
   Serial.print("pH               : ");
-  Serial.println(data.pH);
+  Serial.println(pH, 2);
 
   Serial.print("EC               : ");
-  Serial.println(data.EC);
+  Serial.println(EC_VALUE, 2);
 
   Serial.print("Nitrogen (N)     : ");
-  Serial.println(data.nitrogen);
+  Serial.println(N_VALUE, 2);
 
   Serial.print("Phosphorus (P)   : ");
-  Serial.println(data.phosphorus);
+  Serial.println(P_VALUE, 2);
 
   Serial.print("Potassium (K)    : ");
-  Serial.println(data.potassium);
+  Serial.println(K_VALUE, 2);
+
 
   Serial.println("========================================");
-  Serial.println();
+
 
   delay(3000);
 }
