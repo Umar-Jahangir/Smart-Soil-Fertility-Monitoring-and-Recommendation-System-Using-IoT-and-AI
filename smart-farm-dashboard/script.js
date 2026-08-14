@@ -238,84 +238,162 @@ function scoreToStatus(score) {
 
 function generateRecommendation(nodeData, status) {
 
-    const n =
-        METRICS.find(m => m.key === "nitrogen");
+    const recommendations = [];
 
-    const p =
-        METRICS.find(m => m.key === "phosphorus");
+    /* =========================================================
+       1. pH ANALYSIS
+    ========================================================= */
 
-    const k =
-        METRICS.find(m => m.key === "potassium");
+    const ph = Number(nodeData.pH);
 
-    const ph =
-        METRICS.find(m => m.key === "pH");
+    if (ph < 6.0) {
 
-    const moist =
-        METRICS.find(m => m.key === "moisture");
+        recommendations.push({
+            priority: 1,
+            text:
+                `Soil pH is low (${ph.toFixed(2)}). ` +
+                `Focus on correcting soil acidity before increasing fertilizer application.`
+        });
 
+    } else if (ph > 7.5) {
 
-    const deficits = [
-
-        {
-            label: "Increase nitrogen availability",
-            value: n.min - nodeData.nitrogen,
-            active: nodeData.nitrogen < n.min
-        },
-
-        {
-            label: "Increase phosphorus availability",
-            value: p.min - nodeData.phosphorus,
-            active: nodeData.phosphorus < p.min
-        },
-
-        {
-            label: "Increase potassium availability",
-            value: k.min - nodeData.potassium,
-            active: nodeData.potassium < k.min
-        },
-
-        {
-            label: "Irrigate soon — moisture is low",
-            value: moist.min - nodeData.moisture,
-            active: nodeData.moisture < moist.min
-        },
-
-        {
-            label: "Improve drainage — moisture is high",
-            value: nodeData.moisture - moist.max,
-            active: nodeData.moisture > moist.max
-        },
-
-        {
-            label: "Apply lime to raise soil pH",
-            value: ph.min - nodeData.pH,
-            active: nodeData.pH < ph.min
-        },
-
-        {
-            label: "Apply sulfur to lower soil pH",
-            value: nodeData.pH - ph.max,
-            active: nodeData.pH > ph.max
-        }
-
-    ].filter(item => item.active);
+        recommendations.push({
+            priority: 1,
+            text:
+                `Soil pH is high (${ph.toFixed(2)}). ` +
+                `Focus on correcting soil alkalinity and improving nutrient availability.`
+        });
+    }
 
 
-    if (deficits.length === 0) {
+    /* =========================================================
+       2. MOISTURE ANALYSIS
+    ========================================================= */
+
+    const moisture =
+        Number(nodeData.moisture);
+
+    if (moisture < 35) {
+
+        recommendations.push({
+            priority: 2,
+            text:
+                `Soil moisture is low (${moisture.toFixed(1)}%). ` +
+                `Irrigation is recommended before fertilizer application.`
+        });
+
+    } else if (moisture > 65) {
+
+        recommendations.push({
+            priority: 2,
+            text:
+                `Soil moisture is high (${moisture.toFixed(1)}%). ` +
+                `Avoid additional irrigation and check soil drainage.`
+        });
+    }
+
+
+    /* =========================================================
+       3. NITROGEN
+    ========================================================= */
+
+    const nitrogen =
+        Number(nodeData.nitrogen);
+
+    if (nitrogen < 40) {
+
+        recommendations.push({
+            priority: 3,
+            text:
+                `Nitrogen is low (${nitrogen.toFixed(0)} mg/kg). ` +
+                `Consider a nitrogen-rich fertilizer according to crop requirements.`
+        });
+    }
+
+
+    /* =========================================================
+       4. PHOSPHORUS
+    ========================================================= */
+
+    const phosphorus =
+        Number(nodeData.phosphorus);
+
+    if (phosphorus < 25) {
+
+        recommendations.push({
+            priority: 3,
+            text:
+                `Phosphorus is low (${phosphorus.toFixed(0)} mg/kg). ` +
+                `Consider a phosphorus-rich fertilizer according to crop requirements.`
+        });
+    }
+
+
+    /* =========================================================
+       5. POTASSIUM
+    ========================================================= */
+
+    const potassium =
+        Number(nodeData.potassium);
+
+    if (potassium < 35) {
+
+        recommendations.push({
+            priority: 3,
+            text:
+                `Potassium is low (${potassium.toFixed(0)} mg/kg). ` +
+                `Consider a potassium-rich fertilizer according to crop requirements.`
+        });
+    }
+
+
+    /* =========================================================
+       6. EC ANALYSIS
+    ========================================================= */
+
+    const ec =
+        Number(nodeData.ec);
+
+    if (ec < 1.0) {
+
+        recommendations.push({
+            priority: 4,
+            text:
+                `EC is low (${ec.toFixed(2)} dS/m). ` +
+                `Nutrient availability may be insufficient.`
+        });
+
+    } else if (ec > 2.0) {
+
+        recommendations.push({
+            priority: 4,
+            text:
+                `EC is high (${ec.toFixed(2)} dS/m). ` +
+                `Avoid excessive fertilizer application and monitor salt accumulation.`
+        });
+    }
+
+
+    /* =========================================================
+       7. SELECT MOST IMPORTANT RECOMMENDATION
+    ========================================================= */
+
+    if (recommendations.length === 0) {
 
         return (
-            "Conditions are within target range — " +
-            "maintain current fertigation schedule."
+            "All monitored soil parameters are within " +
+            "the target range. Maintain the current " +
+            "fertigation and irrigation schedule."
         );
     }
 
 
-    deficits.sort(
-        (a, b) => b.value - a.value
+    recommendations.sort(
+        (a, b) => a.priority - b.priority
     );
 
 
-    return deficits[0].label;
+    return recommendations[0].text;
 }
 
 
@@ -1267,34 +1345,15 @@ async function updateDashboard() {
 
     try {
 
-        /*
-           Get LIVE data from FastAPI
-        */
+        // Get LIVE data from FastAPI
+        const data = await fetchFarmData();
 
-        const data =
-            await fetchFarmData();
+        console.log("Live farm data:", data);
 
 
-        /*
-           Validate the response
-        */
-
-        if (
-            !data ||
-            !data.node1 ||
-            !data.node2
-        ) {
-
-            throw new Error(
-                "Invalid farm data received from backend."
-            );
-
-        }
-
-
-        /*
-           NODE 1
-        */
+        // ================================
+        // NODE 1
+        // ================================
 
         const node1Result =
             renderNodeCard(
@@ -1303,9 +1362,9 @@ async function updateDashboard() {
             );
 
 
-        /*
-           NODE 2
-        */
+        // ================================
+        // NODE 2
+        // ================================
 
         const node2Result =
             renderNodeCard(
@@ -1314,15 +1373,14 @@ async function updateDashboard() {
             );
 
 
-        /*
-           RECOMMENDATIONS
-        */
+        // ================================
+        // FERTILIZER RECOMMENDATIONS
+        // ================================
 
         const recommendations =
             document.getElementById(
-                "recommendations"
+                "recommendGrid"
             );
-
 
         if (recommendations) {
 
@@ -1342,33 +1400,39 @@ async function updateDashboard() {
                     node2Result.status
                 );
 
+        } else {
+
+            console.error(
+                "Could not find element with id='recommendations'"
+            );
+
         }
 
 
-        /*
-           NPK
-        */
+        // ================================
+        // NPK
+        // ================================
 
         renderNPK(data);
 
 
-        /*
-           ALERTS
-        */
+        // ================================
+        // SMART ALERTS
+        // ================================
 
         renderAlerts(data);
 
 
-        /*
-           COMPARISON TABLE
-        */
+        // ================================
+        // NODE COMPARISON
+        // ================================
 
         renderComparison(data);
 
 
-        /*
-           CONNECTION STATUS
-        */
+        // ================================
+        // CONNECTION STATUS
+        // ================================
 
         setGatewayStatus(true);
 
@@ -1377,14 +1441,8 @@ async function updateDashboard() {
         updateLastUpdatedTime();
 
 
-        /*
-           Debug information
-           Useful while testing.
-        */
-
         console.log(
-            "Dashboard updated successfully:",
-            new Date().toLocaleTimeString()
+            "Dashboard updated successfully."
         );
 
 
@@ -1394,11 +1452,6 @@ async function updateDashboard() {
             "Dashboard update failed:",
             error
         );
-
-
-        /*
-           Show offline state
-        */
 
         setGatewayStatus(false);
 
