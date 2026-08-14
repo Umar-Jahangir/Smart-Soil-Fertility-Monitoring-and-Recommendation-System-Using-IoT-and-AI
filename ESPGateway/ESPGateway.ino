@@ -3,40 +3,43 @@
 #include <esp_now.h>
 
 // ======================================================
-// Wi-Fi
+// WIFI SETTINGS
 // ======================================================
 
 const char* ssid = "faria";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* password = "stuff0609";
 
 // ======================================================
-// ThingsBoard
+// THINGSBOARD SETTINGS
 // ======================================================
 
 const char* thingsboardServer = "mqtt.thingsboard.cloud";
 const int thingsboardPort = 1883;
 
-// PUT YOUR SMART FARM GATEWAY ACCESS TOKEN HERE
-const char* thingsboardToken = "PASTE_YOUR_GATEWAY_TOKEN_HERE";
+// IMPORTANT:
+// Put the NEW access token of "Smart Farm Gateway" here.
+// Do NOT use Node 1 or Node 2 tokens.
+const char* thingsboardToken = "c6m0z380ddfdsv14ltv9";
 
-// ======================================================
-// ThingsBoard downstream device names
-// These MUST exactly match the names in ThingsBoard
-// ======================================================
-
+// These names MUST exactly match ThingsBoard device names.
 const char* node1Name = "Farm Node 1";
 const char* node2Name = "Farm Node 2";
 
 // ======================================================
-// Wi-Fi / MQTT
+// MQTT
 // ======================================================
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
+// Increase MQTT packet size.
+// Our telemetry JSON is larger than the default 256 bytes.
+const int MQTT_BUFFER_SIZE = 1024;
+
+
 // ======================================================
-// Sensor data structure
-// Must match Node 1 and Node 2
+// ESP-NOW DATA STRUCTURE
+// MUST MATCH NODE 1 AND NODE 2
 // ======================================================
 
 typedef struct struct_message {
@@ -59,19 +62,16 @@ typedef struct struct_message {
 
 } struct_message;
 
-struct_message incomingData;
 
 // ======================================================
-// Flags for received data
+// VARIABLES FOR RECEIVED DATA
 // ======================================================
-
-volatile bool newDataReceived = false;
 
 struct_message latestNode1;
 struct_message latestNode2;
 
-bool node1Received = false;
-bool node2Received = false;
+volatile bool node1Received = false;
+volatile bool node2Received = false;
 
 
 // ======================================================
@@ -79,52 +79,54 @@ bool node2Received = false;
 // ======================================================
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info,
-                const uint8_t *incomingDataBytes,
+                const uint8_t *incomingData,
                 int len) {
 
   if (len != sizeof(struct_message)) {
 
-    Serial.println("Received packet size mismatch!");
+    Serial.println("ERROR: Received packet size mismatch!");
 
     return;
   }
 
-  struct_message received;
+  struct_message receivedData;
 
-  memcpy(&received, incomingDataBytes, sizeof(received));
+  memcpy(&receivedData,
+         incomingData,
+         sizeof(receivedData));
 
-  // -----------------------------
-  // Node 1
-  // -----------------------------
 
-  if (received.nodeID == 1) {
+  // ----------------------------------------------------
+  // NODE 1
+  // ----------------------------------------------------
+
+  if (receivedData.nodeID == 1) {
 
     memcpy(&latestNode1,
-           &received,
+           &receivedData,
            sizeof(struct_message));
 
     node1Received = true;
   }
 
-  // -----------------------------
-  // Node 2
-  // -----------------------------
 
-  else if (received.nodeID == 2) {
+  // ----------------------------------------------------
+  // NODE 2
+  // ----------------------------------------------------
+
+  else if (receivedData.nodeID == 2) {
 
     memcpy(&latestNode2,
-           &received,
+           &receivedData,
            sizeof(struct_message));
 
     node2Received = true;
   }
-
-  newDataReceived = true;
 }
 
 
 // ======================================================
-// Print Node Data
+// PRINT SENSOR DATA
 // ======================================================
 
 void printNodeData(struct_message data) {
@@ -173,15 +175,22 @@ void printNodeData(struct_message data) {
 
 
 // ======================================================
-// Connect Wi-Fi
+// CONNECT TO WIFI
 // ======================================================
 
 void connectWiFi() {
+
+  if (WiFi.status() == WL_CONNECTED) {
+    return;
+  }
 
   Serial.println();
   Serial.println("========================================");
   Serial.println("        CONNECTING TO WI-FI");
   Serial.println("========================================");
+
+  Serial.print("Network: ");
+  Serial.println(ssid);
 
   WiFi.mode(WIFI_STA);
 
@@ -189,7 +198,8 @@ void connectWiFi() {
 
   int attempts = 0;
 
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  while (WiFi.status() != WL_CONNECTED &&
+         attempts < 30) {
 
     delay(500);
 
@@ -207,7 +217,7 @@ void connectWiFi() {
     Serial.print("IP Address   : ");
     Serial.println(WiFi.localIP());
 
-    Serial.print("Wi-Fi MAC     : ");
+    Serial.print("Wi-Fi MAC    : ");
     Serial.println(WiFi.macAddress());
 
     Serial.print("Wi-Fi Channel : ");
@@ -219,184 +229,390 @@ void connectWiFi() {
 
     Serial.println("Wi-Fi connection FAILED!");
 
+    Serial.println("========================================");
   }
 }
 
 
 // ======================================================
-// Connect MQTT
+// CONNECT TO THINGSBOARD MQTT
 // ======================================================
 
-void connectMQTT() {
+bool connectMQTT() {
 
-  while (!mqttClient.connected()) {
+  if (mqttClient.connected()) {
+    return true;
+  }
+
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("      CONNECTING TO THINGSBOARD");
+  Serial.println("========================================");
+
+  Serial.println("Server: mqtt.thingsboard.cloud");
+  Serial.println("Port  : 1883");
+
+  // ----------------------------------------------------
+  // MQTT client ID
+  // ----------------------------------------------------
+
+  String clientID =
+    "ESP32-Gateway-" +
+    WiFi.macAddress();
+
+  clientID.replace(":", "");
+
+  // ----------------------------------------------------
+  // MQTT connection
+  //
+  // ThingsBoard:
+  // Username = Gateway Access Token
+  // Password = empty
+  // ----------------------------------------------------
+
+  bool connected = mqttClient.connect(
+    clientID.c_str(),
+    thingsboardToken,
+    ""
+  );
+
+  if (connected) {
 
     Serial.println();
-    Serial.println("Connecting to ThingsBoard...");
+    Serial.println("########################################");
+    Serial.println(" ThingsBoard MQTT CONNECTED SUCCESSFULLY");
+    Serial.println("########################################");
 
-    String clientID = "ESP32-Gateway";
+    // --------------------------------------------------
+    // Tell ThingsBoard Node 1 is connected
+    // --------------------------------------------------
 
-    if (mqttClient.connect(clientID.c_str(),
-                           thingsboardToken,
-                           NULL)) {
+    String node1Connect =
+      "{\"device\":\"" +
+      String(node1Name) +
+      "\"}";
 
-      Serial.println("ThingsBoard MQTT connected!");
-
-      Serial.println("========================================");
-
-      // ------------------------------------------
-      // Announce Node 1
-      // ------------------------------------------
-
-      String connectNode1 =
-        "{\"device\":\"" + String(node1Name) + "\"}";
-
+    bool node1Status =
       mqttClient.publish(
         "v1/gateway/connect",
-        connectNode1.c_str()
+        node1Connect.c_str()
       );
 
-      Serial.println("Farm Node 1 connected to ThingsBoard.");
+    if (node1Status) {
 
-      // ------------------------------------------
-      // Announce Node 2
-      // ------------------------------------------
-
-      String connectNode2 =
-        "{\"device\":\"" + String(node2Name) + "\"}";
-
-      mqttClient.publish(
-        "v1/gateway/connect",
-        connectNode2.c_str()
+      Serial.println(
+        "Farm Node 1 registered with Gateway."
       );
-
-      Serial.println("Farm Node 2 connected to ThingsBoard.");
 
     } else {
 
-      Serial.print("MQTT connection failed, state = ");
-      Serial.println(mqttClient.state());
-
-      Serial.println("Retrying in 5 seconds...");
-
-      delay(5000);
+      Serial.println(
+        "WARNING: Node 1 registration failed."
+      );
     }
+
+
+    // --------------------------------------------------
+    // Tell ThingsBoard Node 2 is connected
+    // --------------------------------------------------
+
+    String node2Connect =
+      "{\"device\":\"" +
+      String(node2Name) +
+      "\"}";
+
+    bool node2Status =
+      mqttClient.publish(
+        "v1/gateway/connect",
+        node2Connect.c_str()
+      );
+
+    if (node2Status) {
+
+      Serial.println(
+        "Farm Node 2 registered with Gateway."
+      );
+
+    } else {
+
+      Serial.println(
+        "WARNING: Node 2 registration failed."
+      );
+    }
+
+    Serial.println(
+      "========================================"
+    );
+
+    return true;
+  }
+
+  else {
+
+    Serial.println();
+    Serial.print(
+      "MQTT connection FAILED. State = "
+    );
+
+    Serial.println(mqttClient.state());
+
+    Serial.println();
+
+    Serial.println(
+      "Possible causes:"
+    );
+
+    Serial.println(
+      "1. Gateway access token is incorrect."
+    );
+
+    Serial.println(
+      "2. Gateway device is not authorized."
+    );
+
+    Serial.println(
+      "3. ThingsBoard Gateway Mode is disabled."
+    );
+
+    Serial.println(
+      "4. Wrong ThingsBoard hostname."
+    );
+
+    Serial.println(
+      "========================================"
+    );
+
+    return false;
   }
 }
 
 
 // ======================================================
-// Send Node 1 telemetry
+// SEND NODE 1 TELEMETRY
 // ======================================================
 
 void sendNode1Telemetry() {
 
+  if (!mqttClient.connected()) {
+
+    Serial.println(
+      "Cannot send Node 1 data: MQTT disconnected."
+    );
+
+    return;
+  }
+
+
+  // ----------------------------------------------------
+  // ThingsBoard Gateway telemetry format
+  // ----------------------------------------------------
+
   String payload = "{";
 
-  payload += "\"Farm Node 1\":[{";
+  payload += "\"";
+  payload += node1Name;
+  payload += "\":[{";
 
   payload += "\"moisture\":";
-  payload += String(latestNode1.moisture, 2);
+  payload += String(
+    latestNode1.moisture,
+    2
+  );
 
   payload += ",\"airTemperature\":";
-  payload += String(latestNode1.airTemperature, 2);
+  payload += String(
+    latestNode1.airTemperature,
+    2
+  );
 
   payload += ",\"airHumidity\":";
-  payload += String(latestNode1.airHumidity, 2);
+  payload += String(
+    latestNode1.airHumidity,
+    2
+  );
 
   payload += ",\"soilTemperature\":";
-  payload += String(latestNode1.soilTemperature, 2);
+  payload += String(
+    latestNode1.soilTemperature,
+    2
+  );
 
   payload += ",\"pH\":";
-  payload += String(latestNode1.pH, 2);
+  payload += String(
+    latestNode1.pH,
+    2
+  );
 
   payload += ",\"EC\":";
-  payload += String(latestNode1.ec, 2);
+  payload += String(
+    latestNode1.ec,
+    2
+  );
 
   payload += ",\"nitrogen\":";
-  payload += String(latestNode1.nitrogen, 2);
+  payload += String(
+    latestNode1.nitrogen,
+    2
+  );
 
   payload += ",\"phosphorus\":";
-  payload += String(latestNode1.phosphorus, 2);
+  payload += String(
+    latestNode1.phosphorus,
+    2
+  );
 
   payload += ",\"potassium\":";
-  payload += String(latestNode1.potassium, 2);
+  payload += String(
+    latestNode1.potassium,
+    2
+  );
 
   payload += "}]}";
 
-  bool success = mqttClient.publish(
-    "v1/gateway/telemetry",
-    payload.c_str()
-  );
+
+  // ----------------------------------------------------
+  // Publish
+  // ----------------------------------------------------
+
+  Serial.println();
+  Serial.println("Sending Node 1 telemetry...");
+
+  Serial.println("Payload:");
+  Serial.println(payload);
+
+  bool success =
+    mqttClient.publish(
+      "v1/gateway/telemetry",
+      payload.c_str()
+    );
+
 
   if (success) {
 
-    Serial.println();
-    Serial.println("Node 1 telemetry sent to ThingsBoard.");
+    Serial.println(
+      "Node 1 telemetry sent SUCCESSFULLY."
+    );
 
   } else {
 
-    Serial.println();
-    Serial.println("Node 1 telemetry FAILED.");
-
+    Serial.println(
+      "Node 1 telemetry SEND FAILED."
+    );
   }
 }
 
 
 // ======================================================
-// Send Node 2 telemetry
+// SEND NODE 2 TELEMETRY
 // ======================================================
 
 void sendNode2Telemetry() {
 
+  if (!mqttClient.connected()) {
+
+    Serial.println(
+      "Cannot send Node 2 data: MQTT disconnected."
+    );
+
+    return;
+  }
+
+
+  // ----------------------------------------------------
+  // ThingsBoard Gateway telemetry format
+  // ----------------------------------------------------
+
   String payload = "{";
 
-  payload += "\"Farm Node 2\":[{";
+  payload += "\"";
+  payload += node2Name;
+  payload += "\":[{";
 
   payload += "\"moisture\":";
-  payload += String(latestNode2.moisture, 2);
+  payload += String(
+    latestNode2.moisture,
+    2
+  );
 
   payload += ",\"airTemperature\":";
-  payload += String(latestNode2.airTemperature, 2);
+  payload += String(
+    latestNode2.airTemperature,
+    2
+  );
 
   payload += ",\"airHumidity\":";
-  payload += String(latestNode2.airHumidity, 2);
+  payload += String(
+    latestNode2.airHumidity,
+    2
+  );
 
   payload += ",\"soilTemperature\":";
-  payload += String(latestNode2.soilTemperature, 2);
+  payload += String(
+    latestNode2.soilTemperature,
+    2
+  );
 
   payload += ",\"pH\":";
-  payload += String(latestNode2.pH, 2);
+  payload += String(
+    latestNode2.pH,
+    2
+  );
 
   payload += ",\"EC\":";
-  payload += String(latestNode2.ec, 2);
+  payload += String(
+    latestNode2.ec,
+    2
+  );
 
   payload += ",\"nitrogen\":";
-  payload += String(latestNode2.nitrogen, 2);
+  payload += String(
+    latestNode2.nitrogen,
+    2
+  );
 
   payload += ",\"phosphorus\":";
-  payload += String(latestNode2.phosphorus, 2);
+  payload += String(
+    latestNode2.phosphorus,
+    2
+  );
 
   payload += ",\"potassium\":";
-  payload += String(latestNode2.potassium, 2);
+  payload += String(
+    latestNode2.potassium,
+    2
+  );
 
   payload += "}]}";
 
-  bool success = mqttClient.publish(
-    "v1/gateway/telemetry",
-    payload.c_str()
-  );
+
+  // ----------------------------------------------------
+  // Publish
+  // ----------------------------------------------------
+
+  Serial.println();
+  Serial.println("Sending Node 2 telemetry...");
+
+  Serial.println("Payload:");
+  Serial.println(payload);
+
+  bool success =
+    mqttClient.publish(
+      "v1/gateway/telemetry",
+      payload.c_str()
+    );
+
 
   if (success) {
 
-    Serial.println();
-    Serial.println("Node 2 telemetry sent to ThingsBoard.");
+    Serial.println(
+      "Node 2 telemetry sent SUCCESSFULLY."
+    );
 
   } else {
 
-    Serial.println();
-    Serial.println("Node 2 telemetry FAILED.");
-
+    Serial.println(
+      "Node 2 telemetry SEND FAILED."
+    );
   }
 }
 
@@ -416,16 +632,28 @@ void setup() {
   Serial.println("           ESP32 GATEWAY");
   Serial.println("========================================");
 
+
   // ----------------------------------------------------
   // Wi-Fi
   // ----------------------------------------------------
 
   WiFi.mode(WIFI_STA);
 
-  Serial.print("Gateway MAC Address: ");
-  Serial.println(WiFi.macAddress());
+  Serial.print(
+    "Gateway Wi-Fi MAC Address: "
+  );
+
+  Serial.println(
+    WiFi.macAddress()
+  );
+
+
+  // ----------------------------------------------------
+  // Connect Wi-Fi
+  // ----------------------------------------------------
 
   connectWiFi();
+
 
   // ----------------------------------------------------
   // MQTT
@@ -436,23 +664,36 @@ void setup() {
     thingsboardPort
   );
 
+  mqttClient.setBufferSize(
+    MQTT_BUFFER_SIZE
+  );
+
+
   // ----------------------------------------------------
   // ESP-NOW
   // ----------------------------------------------------
 
   if (esp_now_init() != ESP_OK) {
 
-    Serial.println("ESP-NOW initialization FAILED!");
+    Serial.println(
+      "ESP-NOW initialization FAILED!"
+    );
 
     return;
   }
 
-  Serial.println("ESP-NOW initialized.");
+  Serial.println(
+    "ESP-NOW initialized."
+  );
 
-  esp_now_register_recv_cb(OnDataRecv);
+
+  esp_now_register_recv_cb(
+    OnDataRecv
+  );
+
 
   // ----------------------------------------------------
-  // MQTT connection
+  // ThingsBoard MQTT
   // ----------------------------------------------------
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -460,7 +701,13 @@ void setup() {
     connectMQTT();
   }
 
+
+  // ----------------------------------------------------
+  // Ready
+  // ----------------------------------------------------
+
   Serial.println();
+  Serial.println("========================================");
   Serial.println("Gateway is ready.");
   Serial.println("========================================");
 }
@@ -473,54 +720,67 @@ void setup() {
 void loop() {
 
   // ----------------------------------------------------
-  // Wi-Fi reconnect
+  // Wi-Fi
   // ----------------------------------------------------
 
   if (WiFi.status() != WL_CONNECTED) {
 
-    Serial.println("Wi-Fi disconnected!");
+    Serial.println(
+      "Wi-Fi disconnected!"
+    );
 
     connectWiFi();
   }
 
+
   // ----------------------------------------------------
-  // MQTT reconnect
+  // MQTT
   // ----------------------------------------------------
 
-  if (WiFi.status() == WL_CONNECTED &&
-      !mqttClient.connected()) {
+  if (
+    WiFi.status() == WL_CONNECTED &&
+    !mqttClient.connected()
+  ) {
 
     connectMQTT();
   }
 
+
   mqttClient.loop();
 
+
   // ----------------------------------------------------
-  // Process new ESP-NOW data
+  // NODE 1 DATA
   // ----------------------------------------------------
 
-  if (newDataReceived) {
+  if (node1Received) {
 
-    newDataReceived = false;
+    // Temporarily disable the flag
+    node1Received = false;
 
-    if (node1Received) {
+    printNodeData(
+      latestNode1
+    );
 
-      printNodeData(latestNode1);
-
-      sendNode1Telemetry();
-
-      node1Received = false;
-    }
-
-    if (node2Received) {
-
-      printNodeData(latestNode2);
-
-      sendNode2Telemetry();
-
-      node2Received = false;
-    }
+    sendNode1Telemetry();
   }
+
+
+  // ----------------------------------------------------
+  // NODE 2 DATA
+  // ----------------------------------------------------
+
+  if (node2Received) {
+
+    node2Received = false;
+
+    printNodeData(
+      latestNode2
+    );
+
+    sendNode2Telemetry();
+  }
+
 
   delay(10);
 }
