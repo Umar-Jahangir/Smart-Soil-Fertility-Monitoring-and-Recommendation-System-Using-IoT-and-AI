@@ -197,23 +197,162 @@ const ICONS = {
 
 function computeSoilHealthScore(nodeData) {
 
-    let inRange = 0;
+    const parameters = [
 
-    METRICS.forEach(metric => {
+        {
+            key: "moisture",
+            min: 35,
+            max: 65,
+            weight: 15
+        },
 
-        const value = Number(nodeData[metric.key]);
+        // pH temporarily excluded while the probe
+        // is being tested in buffer solution.
+        /*
+        {
+            key: "pH",
+            min: 6.0,
+            max: 7.5,
+            weight: 20
+        },
+        */
 
-        if (
-            value >= metric.min &&
-            value <= metric.max
-        ) {
-            inRange++;
+        {
+            key: "ec",
+            min: 1.0,
+            max: 2.0,
+            weight: 10
+        },
+
+        {
+            key: "nitrogen",
+            min: 40,
+            max: 80,
+            weight: 15
+        },
+
+        {
+            key: "phosphorus",
+            min: 25,
+            max: 60,
+            weight: 10
+        },
+
+        {
+            key: "potassium",
+            min: 35,
+            max: 70,
+            weight: 15
+        },
+
+        {
+            key: "soilTemperature",
+            min: 18,
+            max: 30,
+            weight: 10
+        },
+
+        {
+            key: "airTemperature",
+            min: 18,
+            max: 32,
+            weight: 2.5
+        },
+
+        {
+            key: "airHumidity",
+            min: 50,
+            max: 90,
+            weight: 2.5
+        }
+    ];
+
+
+    let totalScore = 0;
+    let totalWeight = 0;
+
+
+    parameters.forEach(parameter => {
+
+        const value = Number(nodeData[parameter.key]);
+
+        if (Number.isNaN(value)) {
+            return;
         }
 
+
+        // Ignore invalid DS18B20 reading
+        if (
+            parameter.key === "soilTemperature" &&
+            value === -127
+        ) {
+            return;
+        }
+
+
+        let parameterScore = 100;
+
+        const range =
+            parameter.max - parameter.min;
+
+
+        if (value < parameter.min) {
+
+            const distance =
+                parameter.min - value;
+
+            parameterScore =
+                Math.max(
+                    0,
+                    100 - ((distance / range) * 100)
+                );
+
+        }
+
+        else if (value > parameter.max) {
+
+            const distance =
+                value - parameter.max;
+
+            parameterScore =
+                Math.max(
+                    0,
+                    100 - ((distance / range) * 100)
+                );
+        }
+
+
+        totalScore +=
+            parameterScore *
+            (parameter.weight / 100);
+
+        totalWeight +=
+            parameter.weight;
     });
 
+
+    /*
+     * Since pH is temporarily excluded,
+     * normalize the score back to 100%.
+     */
+
+    if (totalWeight === 0) {
+        return 0;
+    }
+
+
+    const normalizedScore =
+        (totalScore / (totalWeight / 100));
+
+
     return Math.round(
-        (inRange / METRICS.length) * 100
+        Math.max(
+            0,
+            Math.min(
+                100,
+                normalizedScore
+            )
+        )
     );
 }
 
