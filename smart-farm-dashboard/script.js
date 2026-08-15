@@ -2,6 +2,7 @@
    SMART FARM SOIL MONITORING SYSTEM — script.js
 
    DATA FLOW:
+
    ESP32 Nodes
         ↓
    ESP32 Gateway
@@ -10,19 +11,33 @@
         ↓
    FastAPI Backend
         ↓
-   This Dashboard
+   ┌───────────────────────────────┐
+   │                               │
+   │ /api/farm-data                │
+   │ /api/ai/predict/1             │
+   │ /api/ai/predict/2             │
+   │                               │
+   └───────────────┬───────────────┘
+                   ↓
+              This Dashboard
 
-   The dashboard receives LIVE data from:
-   http://127.0.0.1:8000/api/farm-data
+   LIVE SENSOR DATA + AI PREDICTIONS
 ================================================================ */
 
 
 /* ================================================================
-   1. LIVE DATA LAYER
+   1. API CONFIGURATION
+================================================================ */
+
+const API_BASE_URL =
+    "http://127.0.0.1:8000";
+
+
+/* ================================================================
+   2. LIVE FARM DATA
 ================================================================ */
 
 async function fetchFarmData() {
-
     const response = await fetch(
         "http://127.0.0.1:8000/api/farm-data",
         {
@@ -41,10 +56,91 @@ async function fetchFarmData() {
 
 
 /* ================================================================
-   2. METRIC / THRESHOLD CONFIG
+   3. AI PREDICTION
+================================================================ */
+
+/*
+   Fetch AI prediction for a specific node.
+
+   nodeId:
+       1 → Node 1
+       2 → Node 2
+
+   Backend endpoint:
+       GET /api/ai/predict/{node_id}
+*/
+
+async function fetchAIPrediction(nodeId) {
+    const response = await fetch(
+        `http://127.0.0.1:8000/api/ai/predict/${nodeId}`,
+        {
+            cache: "no-store"
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `AI API returned ${response.status}`
+        );
+    }
+
+    return await response.json();
+}
+
+
+/*
+   Fetch AI predictions for both nodes.
+
+   If one prediction fails, the other node can still
+   continue working.
+*/
+
+async function fetchAllAIPredictions() {
+
+    const results = {
+        node1: null,
+        node2: null
+    };
+
+
+    try {
+
+        results.node1 =
+            await fetchAIPrediction(1);
+
+    } catch (error) {
+
+        console.error(
+            "Node 1 AI prediction failed:",
+            error
+        );
+    }
+
+
+    try {
+
+        results.node2 =
+            await fetchAIPrediction(2);
+
+    } catch (error) {
+
+        console.error(
+            "Node 2 AI prediction failed:",
+            error
+        );
+    }
+
+
+    return results;
+}
+
+
+/* ================================================================
+   4. METRIC / THRESHOLD CONFIG
 ================================================================ */
 
 const METRICS = [
+
     {
         key: "moisture",
         label: "Soil Moisture",
@@ -134,19 +230,24 @@ const METRICS = [
         max: 70,
         icon: "leaf"
     }
+
 ];
 
 
 const NPK_SCALE_MAX = 100;
 
+
 const NODE_LABELS = {
+
     node1: "Node 1",
+
     node2: "Node 2"
+
 };
 
 
 /* ================================================================
-   3. ICONS
+   5. ICONS
 ================================================================ */
 
 const ICONS = {
@@ -188,11 +289,12 @@ const ICONS = {
         '<path d="M5 21c9 0 14-5 14-14V5h-2C8 5 5 12 5 21Z"/>' +
         '<path d="M5 21c0-4 3-8 8-10"/>' +
         '</svg>'
+
 };
 
 
 /* ================================================================
-   4. SOIL HEALTH CALCULATION
+   6. EXISTING SOIL HEALTH SCORE
 ================================================================ */
 
 function computeSoilHealthScore(nodeData) {
@@ -206,15 +308,10 @@ function computeSoilHealthScore(nodeData) {
             weight: 15
         },
 
-        // pH temporarily excluded while the probe
-        // is being tested in buffer solution.
         /*
-        {
-            key: "pH",
-            min: 6.0,
-            max: 7.5,
-            weight: 20
-        },
+           pH temporarily excluded because the Node 1
+           pH probe is currently being tested in buffer
+           solution.
         */
 
         {
@@ -265,87 +362,136 @@ function computeSoilHealthScore(nodeData) {
             max: 90,
             weight: 2.5
         }
+
     ];
 
 
     let totalScore = 0;
+
     let totalWeight = 0;
 
 
-    parameters.forEach(parameter => {
+    parameters.forEach(
+        parameter => {
 
-        const value = Number(nodeData[parameter.key]);
-
-        if (Number.isNaN(value)) {
-            return;
-        }
-
-
-        // Ignore invalid DS18B20 reading
-        if (
-            parameter.key === "soilTemperature" &&
-            value === -127
-        ) {
-            return;
-        }
-
-
-        let parameterScore = 100;
-
-        const range =
-            parameter.max - parameter.min;
-
-
-        if (value < parameter.min) {
-
-            const distance =
-                parameter.min - value;
-
-            parameterScore =
-                Math.max(
-                    0,
-                    100 - ((distance / range) * 100)
+            const value =
+                Number(
+                    nodeData[
+                        parameter.key
+                    ]
                 );
 
-        }
 
-        else if (value > parameter.max) {
+            if (Number.isNaN(value)) {
 
-            const distance =
-                value - parameter.max;
+                return;
 
-            parameterScore =
-                Math.max(
-                    0,
-                    100 - ((distance / range) * 100)
+            }
+
+
+            /*
+               Ignore invalid DS18B20 reading.
+            */
+
+            if (
+                parameter.key ===
+                "soilTemperature" &&
+                value === -127
+            ) {
+
+                return;
+
+            }
+
+
+            let parameterScore = 100;
+
+
+            const range =
+                parameter.max -
+                parameter.min;
+
+
+            if (
+                value <
+                parameter.min
+            ) {
+
+                const distance =
+                    parameter.min -
+                    value;
+
+                parameterScore =
+                    Math.max(
+                        0,
+                        100 -
+                        (
+                            distance /
+                            range
+                        ) *
+                        100
+                    );
+
+            }
+
+
+            else if (
+                value >
+                parameter.max
+            ) {
+
+                const distance =
+                    value -
+                    parameter.max;
+
+                parameterScore =
+                    Math.max(
+                        0,
+                        100 -
+                        (
+                            distance /
+                            range
+                        ) *
+                        100
+                    );
+
+            }
+
+
+            totalScore +=
+                parameterScore *
+                (
+                    parameter.weight /
+                    100
                 );
+
+
+            totalWeight +=
+                parameter.weight;
+
         }
+    );
 
 
-        totalScore +=
-            parameterScore *
-            (parameter.weight / 100);
+    if (
+        totalWeight === 0
+    ) {
 
-        totalWeight +=
-            parameter.weight;
-    });
-
-
-    /*
-     * Since pH is temporarily excluded,
-     * normalize the score back to 100%.
-     */
-
-    if (totalWeight === 0) {
         return 0;
+
     }
 
 
     const normalizedScore =
-        (totalScore / (totalWeight / 100));
+        totalScore /
+        (
+            totalWeight /
+            100
+        );
 
 
     return Math.round(
+
         Math.max(
             0,
             Math.min(
@@ -353,458 +499,730 @@ function computeSoilHealthScore(nodeData) {
                 normalizedScore
             )
         )
+
     );
+
 }
 
 
 function scoreToStatus(score) {
 
-    if (score >= 75) {
+    if (
+        score >= 75
+    ) {
+
         return "healthy";
+
     }
 
-    if (score >= 50) {
+
+    if (
+        score >= 50
+    ) {
+
         return "moderate";
+
     }
+
 
     return "attention";
+
 }
 
 
 /* ================================================================
-   5. FERTILIZER RECOMMENDATION
+   7. FERTILIZER RECOMMENDATION
 ================================================================ */
 
-function generateRecommendation(nodeData, status) {
+function generateRecommendation(
+    nodeData,
+    status
+) {
 
     const recommendations = [];
 
-    /* =========================================================
-       1. pH ANALYSIS
-    ========================================================= */
 
-    const ph = Number(nodeData.pH);
+    /*
+       1. pH
+    */
 
-    if (ph < 6.0) {
+    const ph =
+        Number(
+            nodeData.pH
+        );
+
+
+    if (
+        ph < 6.0
+    ) {
 
         recommendations.push({
+
             priority: 1,
+
             text:
                 `Soil pH is low (${ph.toFixed(2)}). ` +
                 `Focus on correcting soil acidity before increasing fertilizer application.`
+
         });
 
-    } else if (ph > 7.5) {
+    }
+
+    else if (
+        ph > 7.5
+    ) {
 
         recommendations.push({
+
             priority: 1,
+
             text:
                 `Soil pH is high (${ph.toFixed(2)}). ` +
                 `Focus on correcting soil alkalinity and improving nutrient availability.`
+
         });
+
     }
 
 
-    /* =========================================================
-       2. MOISTURE ANALYSIS
-    ========================================================= */
+    /*
+       2. MOISTURE
+    */
 
     const moisture =
-        Number(nodeData.moisture);
+        Number(
+            nodeData.moisture
+        );
 
-    if (moisture < 35) {
+
+    if (
+        moisture < 35
+    ) {
 
         recommendations.push({
+
             priority: 2,
+
             text:
                 `Soil moisture is low (${moisture.toFixed(1)}%). ` +
                 `Irrigation is recommended before fertilizer application.`
+
         });
 
-    } else if (moisture > 65) {
+    }
+
+    else if (
+        moisture > 65
+    ) {
 
         recommendations.push({
+
             priority: 2,
+
             text:
                 `Soil moisture is high (${moisture.toFixed(1)}%). ` +
                 `Avoid additional irrigation and check soil drainage.`
+
         });
+
     }
 
 
-    /* =========================================================
+    /*
        3. NITROGEN
-    ========================================================= */
+    */
 
     const nitrogen =
-        Number(nodeData.nitrogen);
+        Number(
+            nodeData.nitrogen
+        );
 
-    if (nitrogen < 40) {
+
+    if (
+        nitrogen < 40
+    ) {
 
         recommendations.push({
+
             priority: 3,
+
             text:
                 `Nitrogen is low (${nitrogen.toFixed(0)} mg/kg). ` +
                 `Consider a nitrogen-rich fertilizer according to crop requirements.`
+
         });
+
     }
 
 
-    /* =========================================================
+    /*
        4. PHOSPHORUS
-    ========================================================= */
+    */
 
     const phosphorus =
-        Number(nodeData.phosphorus);
+        Number(
+            nodeData.phosphorus
+        );
 
-    if (phosphorus < 25) {
+
+    if (
+        phosphorus < 25
+    ) {
 
         recommendations.push({
+
             priority: 3,
+
             text:
                 `Phosphorus is low (${phosphorus.toFixed(0)} mg/kg). ` +
                 `Consider a phosphorus-rich fertilizer according to crop requirements.`
+
         });
+
     }
 
 
-    /* =========================================================
+    /*
        5. POTASSIUM
-    ========================================================= */
+    */
 
     const potassium =
-        Number(nodeData.potassium);
+        Number(
+            nodeData.potassium
+        );
 
-    if (potassium < 35) {
+
+    if (
+        potassium < 35
+    ) {
 
         recommendations.push({
+
             priority: 3,
+
             text:
                 `Potassium is low (${potassium.toFixed(0)} mg/kg). ` +
                 `Consider a potassium-rich fertilizer according to crop requirements.`
+
         });
+
     }
 
 
-    /* =========================================================
-       6. EC ANALYSIS
-    ========================================================= */
+    /*
+       6. EC
+    */
 
     const ec =
-        Number(nodeData.ec);
+        Number(
+            nodeData.ec
+        );
 
-    if (ec < 1.0) {
+
+    if (
+        ec < 1.0
+    ) {
 
         recommendations.push({
+
             priority: 4,
+
             text:
                 `EC is low (${ec.toFixed(2)} dS/m). ` +
                 `Nutrient availability may be insufficient.`
+
         });
 
-    } else if (ec > 2.0) {
+    }
+
+    else if (
+        ec > 2.0
+    ) {
 
         recommendations.push({
+
             priority: 4,
+
             text:
                 `EC is high (${ec.toFixed(2)} dS/m). ` +
                 `Avoid excessive fertilizer application and monitor salt accumulation.`
+
         });
+
     }
 
 
-    /* =========================================================
-       7. SELECT MOST IMPORTANT RECOMMENDATION
-    ========================================================= */
+    /*
+       No issues.
+    */
 
-    if (recommendations.length === 0) {
+    if (
+        recommendations.length === 0
+    ) {
 
         return (
             "All monitored soil parameters are within " +
             "the target range. Maintain the current " +
             "fertigation and irrigation schedule."
         );
+
     }
 
 
     recommendations.sort(
-        (a, b) => a.priority - b.priority
+        (
+            a,
+            b
+        ) =>
+            a.priority -
+            b.priority
     );
 
 
     return recommendations[0].text;
+
 }
 
 
 /* ================================================================
-   6. ALERT GENERATION
+   8. ALERT GENERATION
 ================================================================ */
 
 function generateAlerts(data) {
 
     const alerts = [];
 
-    Object.keys(data).forEach(nodeKey => {
 
-        const nodeData = data[nodeKey];
-        const label = NODE_LABELS[nodeKey];
+    Object.keys(data).forEach(
+        nodeKey => {
 
-        let warningCount = 0;
+            const nodeData =
+                data[nodeKey];
 
 
-        /* =========================================================
-           SOIL MOISTURE
-        ========================================================= */
+            const label =
+                NODE_LABELS[nodeKey];
 
-        const moisture =
-            METRICS.find(m => m.key === "moisture");
 
-        if (nodeData.moisture < moisture.min) {
+            let warningCount = 0;
 
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Soil moisture is low (${nodeData.moisture.toFixed(1)}%). Irrigation may be required.`
-            });
 
-            warningCount++;
+            /*
+               SOIL MOISTURE
+            */
 
-        } else if (nodeData.moisture > moisture.max) {
+            const moisture =
+                METRICS.find(
+                    m =>
+                        m.key ===
+                        "moisture"
+                );
 
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Soil moisture is high (${nodeData.moisture.toFixed(1)}%). Check for over-irrigation.`
-            });
 
-            warningCount++;
+            if (
+                nodeData.moisture <
+                moisture.min
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Soil moisture is low (${nodeData.moisture.toFixed(1)}%). ` +
+                        `Irrigation may be required.`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            else if (
+                nodeData.moisture >
+                moisture.max
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Soil moisture is high (${nodeData.moisture.toFixed(1)}%). ` +
+                        `Check for over-irrigation.`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               pH
+            */
+
+            const ph =
+                METRICS.find(
+                    m =>
+                        m.key === "pH"
+                );
+
+
+            if (
+                nodeData.pH <
+                ph.min
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Soil pH is too low (${nodeData.pH.toFixed(2)}). ` +
+                        `Consider measures to increase soil pH.`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            else if (
+                nodeData.pH >
+                ph.max
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Soil pH is too high (${nodeData.pH.toFixed(2)}). ` +
+                        `Consider measures to reduce soil pH.`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               EC
+            */
+
+            const ec =
+                METRICS.find(
+                    m =>
+                        m.key === "ec"
+                );
+
+
+            if (
+                nodeData.ec <
+                ec.min
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `EC is low (${nodeData.ec.toFixed(2)} dS/m). ` +
+                        `Nutrient availability may be low.`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            else if (
+                nodeData.ec >
+                ec.max
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `EC is high (${nodeData.ec.toFixed(2)} dS/m). ` +
+                        `Possible excess salts or fertilizer concentration.`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               NITROGEN
+            */
+
+            const nitrogen =
+                METRICS.find(
+                    m =>
+                        m.key ===
+                        "nitrogen"
+                );
+
+
+            if (
+                nodeData.nitrogen <
+                nitrogen.min
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Nitrogen level is low (${nodeData.nitrogen.toFixed(0)} mg/kg).`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               PHOSPHORUS
+            */
+
+            const phosphorus =
+                METRICS.find(
+                    m =>
+                        m.key ===
+                        "phosphorus"
+                );
+
+
+            if (
+                nodeData.phosphorus <
+                phosphorus.min
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Phosphorus level is low (${nodeData.phosphorus.toFixed(0)} mg/kg).`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               POTASSIUM
+            */
+
+            const potassium =
+                METRICS.find(
+                    m =>
+                        m.key ===
+                        "potassium"
+                );
+
+
+            if (
+                nodeData.potassium <
+                potassium.min
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Potassium level is low (${nodeData.potassium.toFixed(0)} mg/kg).`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               SOIL TEMPERATURE
+            */
+
+            const soilTemperature =
+                METRICS.find(
+                    m =>
+                        m.key ===
+                        "soilTemperature"
+                );
+
+
+            /*
+               Ignore -127 °C DS18B20
+               error value.
+            */
+
+            if (
+
+                nodeData.soilTemperature !== -127 &&
+
+                (
+                    nodeData.soilTemperature <
+                    soilTemperature.min ||
+
+                    nodeData.soilTemperature >
+                    soilTemperature.max
+                )
+
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "warning",
+
+                    message:
+                        `Soil temperature is outside the target range ` +
+                        `(${nodeData.soilTemperature.toFixed(1)} °C).`
+
+                });
+
+
+                warningCount++;
+
+            }
+
+
+            /*
+               Everything normal.
+            */
+
+            if (
+                warningCount === 0
+            ) {
+
+                alerts.push({
+
+                    node: label,
+
+                    type: "ok",
+
+                    message:
+                        "All monitored soil parameters are within the recommended range."
+
+                });
+
+            }
+
         }
-
-
-        /* =========================================================
-           SOIL pH
-        ========================================================= */
-
-        const ph =
-            METRICS.find(m => m.key === "pH");
-
-        if (nodeData.pH < ph.min) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Soil pH is too low (${nodeData.pH.toFixed(2)}). Consider measures to increase soil pH.`
-            });
-
-            warningCount++;
-
-        } else if (nodeData.pH > ph.max) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Soil pH is too high (${nodeData.pH.toFixed(2)}). Consider measures to reduce soil pH.`
-            });
-
-            warningCount++;
-        }
-
-
-        /* =========================================================
-           ELECTRICAL CONDUCTIVITY
-        ========================================================= */
-
-        const ec =
-            METRICS.find(m => m.key === "ec");
-
-        if (nodeData.ec < ec.min) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `EC is low (${nodeData.ec.toFixed(2)} dS/m). Nutrient availability may be low.`
-            });
-
-            warningCount++;
-
-        } else if (nodeData.ec > ec.max) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `EC is high (${nodeData.ec.toFixed(2)} dS/m). Possible excess salts or fertilizer concentration.`
-            });
-
-            warningCount++;
-        }
-
-
-        /* =========================================================
-           NITROGEN
-        ========================================================= */
-
-        const nitrogen =
-            METRICS.find(m => m.key === "nitrogen");
-
-        if (nodeData.nitrogen < nitrogen.min) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Nitrogen level is low (${nodeData.nitrogen.toFixed(0)} mg/kg).`
-            });
-
-            warningCount++;
-
-        }
-
-
-        /* =========================================================
-           PHOSPHORUS
-        ========================================================= */
-
-        const phosphorus =
-            METRICS.find(m => m.key === "phosphorus");
-
-        if (nodeData.phosphorus < phosphorus.min) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Phosphorus level is low (${nodeData.phosphorus.toFixed(0)} mg/kg).`
-            });
-
-            warningCount++;
-
-        }
-
-
-        /* =========================================================
-           POTASSIUM
-        ========================================================= */
-
-        const potassium =
-            METRICS.find(m => m.key === "potassium");
-
-        if (nodeData.potassium < potassium.min) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Potassium level is low (${nodeData.potassium.toFixed(0)} mg/kg).`
-            });
-
-            warningCount++;
-
-        }
-
-
-        /* =========================================================
-           SOIL TEMPERATURE
-        ========================================================= */
-
-        const soilTemperature =
-            METRICS.find(
-                m => m.key === "soilTemperature"
-            );
-
-        /*
-           Ignore -127 °C because this is the DS18B20
-           disconnected/error value you observed during
-           testing. It should not create a false alert.
-        */
-
-        if (
-            nodeData.soilTemperature !== -127 &&
-            (
-                nodeData.soilTemperature < soilTemperature.min ||
-                nodeData.soilTemperature > soilTemperature.max
-            )
-        ) {
-
-            alerts.push({
-                node: label,
-                type: "warning",
-                message:
-                    `Soil temperature is outside the target range (${nodeData.soilTemperature.toFixed(1)} °C).`
-            });
-
-            warningCount++;
-        }
-
-
-        /* =========================================================
-           ALL PARAMETERS NORMAL
-        ========================================================= */
-
-        if (warningCount === 0) {
-
-            alerts.push({
-                node: label,
-                type: "ok",
-                message:
-                    "All monitored soil parameters are within the recommended range."
-            });
-
-        }
-
-    });
+    );
 
 
     return alerts;
+
 }
 
 
 /* ================================================================
-   7. VALUE FORMATTER
+   9. VALUE FORMATTER
 ================================================================ */
 
-function formatValue(metric, rawValue) {
+function formatValue(
+    metric,
+    rawValue
+) {
 
-    const value = Number(rawValue);
+    const value =
+        Number(rawValue);
 
-    if (Number.isNaN(value)) {
+
+    if (
+        Number.isNaN(value)
+    ) {
+
         return "--";
+
     }
+
 
     return value.toFixed(
         metric.decimals
     );
+
 }
 
 
 /* ================================================================
-   8. NODE CARD
+   10. NODE CARD
 ================================================================ */
 
-function renderNodeCard(nodeKey, nodeData) {
+function renderNodeCard(
+    nodeKey,
+    nodeData
+) {
 
     const card =
         document.getElementById(
+
             nodeKey === "node1"
                 ? "node1Card"
                 : "node2Card"
+
         );
 
 
     if (!card) {
+
         console.error(
             `Could not find card for ${nodeKey}`
         );
 
+
         return {
+
             score: 0,
+
             status: "attention"
+
         };
+
     }
 
 
@@ -834,34 +1252,42 @@ function renderNodeCard(nodeKey, nodeData) {
 
 
     const sensorTiles =
-        METRICS.map(metric => {
+        METRICS.map(
+            metric => {
 
-            return `
-                <div class="sensor-tile">
+                return `
 
-                    <span class="icon">
-                        ${ICONS[metric.icon]}
-                    </span>
+                    <div class="sensor-tile">
 
-                    <span class="sensor-label">
-                        ${metric.label}
-                    </span>
-
-                    <span class="sensor-value">
-                        ${formatValue(
-                            metric,
-                            nodeData[metric.key]
-                        )}
-
-                        <span class="unit">
-                            ${metric.unit}
+                        <span class="icon">
+                            ${ICONS[metric.icon]}
                         </span>
-                    </span>
 
-                </div>
-            `;
+                        <span class="sensor-label">
+                            ${metric.label}
+                        </span>
 
-        }).join("");
+                        <span class="sensor-value">
+
+                            ${formatValue(
+                                metric,
+                                nodeData[
+                                    metric.key
+                                ]
+                            )}
+
+                            <span class="unit">
+                                ${metric.unit}
+                            </span>
+
+                        </span>
+
+                    </div>
+
+                `;
+
+            }
+        ).join("");
 
 
     card.innerHTML = `
@@ -869,8 +1295,11 @@ function renderNodeCard(nodeKey, nodeData) {
         <div class="node-card-head">
 
             <h3>
+
                 <span class="node-tag"></span>
+
                 ${label}
+
             </h3>
 
             <span class="node-badge status-${status}">
@@ -896,10 +1325,13 @@ function renderNodeCard(nodeKey, nodeData) {
                 </span>
 
                 <span class="score">
+
                     ${score}
+
                     <span class="of100">
                         /100
                     </span>
+
                 </span>
 
             </div>
@@ -926,7 +1358,9 @@ function renderNodeCard(nodeKey, nodeData) {
             <div class="soil-core-scale">
 
                 <span>0</span>
+
                 <span>50</span>
+
                 <span>100</span>
 
             </div>
@@ -937,41 +1371,165 @@ function renderNodeCard(nodeKey, nodeData) {
 
 
     return {
+
         score,
+
         status
+
     };
+
 }
 
 
 /* ================================================================
-   9. RECOMMENDATION RENDERER
+   11. AI RESULT HELPERS
+================================================================ */
+
+function getAIStatusClass(
+    prediction
+) {
+
+    if (!prediction) {
+
+        return "attention";
+
+    }
+
+
+    const value =
+        String(
+            prediction
+        ).toLowerCase();
+
+
+    if (
+        value === "healthy"
+    ) {
+
+        return "healthy";
+
+    }
+
+
+    if (
+        value === "moderate"
+    ) {
+
+        return "moderate";
+
+    }
+
+
+    return "attention";
+
+}
+
+
+function getAIStatusText(
+    prediction
+) {
+
+    if (!prediction) {
+
+        return "AI Unavailable";
+
+    }
+
+
+    return String(
+        prediction
+    );
+
+}
+
+
+/*
+   Format AI confidence.
+
+   Backend returns confidence as a percentage,
+   e.g. 69.5.
+*/
+
+function formatAIConfidence(
+    confidence
+) {
+
+    if (
+        confidence === null ||
+        confidence === undefined ||
+        Number.isNaN(
+            Number(confidence)
+        )
+    ) {
+
+        return "--";
+
+    }
+
+
+    return `${Number(
+        confidence
+    ).toFixed(1)}%`;
+
+}
+
+
+/* ================================================================
+   12. RECOMMENDATION RENDERER
 ================================================================ */
 
 function renderRecommendation(
+
     nodeKey,
+
     nodeData,
-    status
+
+    status,
+
+    aiResult
+
 ) {
 
     const label =
         NODE_LABELS[nodeKey];
 
 
-    const statusText = {
-
-        healthy: "Healthy",
-
-        moderate: "Moderate",
-
-        attention: "Needs Attention"
-
-    }[status];
-
+    /*
+       Existing rule-based recommendation.
+    */
 
     const action =
         generateRecommendation(
             nodeData,
             status
+        );
+
+
+    /*
+       AI result.
+    */
+
+    const aiPrediction =
+        aiResult
+            ? aiResult.prediction
+            : null;
+
+
+    const aiConfidence =
+        aiResult
+            ? aiResult.confidence
+            : null;
+
+
+    const aiStatusClass =
+        getAIStatusClass(
+            aiPrediction
+        );
+
+
+    const aiStatusText =
+        getAIStatusText(
+            aiPrediction
         );
 
 
@@ -983,18 +1541,66 @@ function renderRecommendation(
                 ${ICONS.leaf}
             </span>
 
+
             <div>
 
                 <p class="rc-node">
                     ${label}
                 </p>
 
+
+                <!-- =================================================
+                     AI SOIL HEALTH RESULT
+                ================================================== -->
+
                 <p class="rc-action">
-                    ${action}
+
+                    <strong>
+                        AI Soil Health:
+                    </strong>
+
+                    <span
+                        class="node-badge status-${aiStatusClass}"
+                    >
+                        ${aiStatusText}
+                    </span>
+
                 </p>
 
+
+                <p class="rc-action">
+
+                    <strong>
+                        AI Confidence:
+                    </strong>
+
+                    ${formatAIConfidence(
+                        aiConfidence
+                    )}
+
+                </p>
+
+
+                <!-- =================================================
+                     EXISTING RECOMMENDATION
+                ================================================== -->
+
+                <p class="rc-action">
+
+                    <strong>
+                        Recommendation:
+                    </strong>
+
+                    ${action}
+
+                </p>
+
+
                 <span class="rc-status">
-                    ${statusText}
+                    ${aiResult
+                        ? "AI Analysis Available"
+                        : "AI Analysis Unavailable"
+                    }
                 </span>
 
             </div>
@@ -1002,14 +1608,17 @@ function renderRecommendation(
         </div>
 
     `;
+
 }
 
 
 /* ================================================================
-   10. NPK RENDERER
+   13. NPK RENDERER
 ================================================================ */
 
-function renderNPK(data) {
+function renderNPK(
+    data
+) {
 
     const nutrients = [
 
@@ -1038,119 +1647,137 @@ function renderNPK(data) {
 
 
     if (!panel) {
+
         return;
+
     }
 
 
     panel.innerHTML =
-        nutrients.map(nutrient => {
+        nutrients.map(
+            nutrient => {
 
-            const v1 =
-                Number(
-                    data.node1[
-                        nutrient.key
-                    ]
-                );
-
-            const v2 =
-                Number(
-                    data.node2[
-                        nutrient.key
-                    ]
-                );
+                const v1 =
+                    Number(
+                        data.node1[
+                            nutrient.key
+                        ]
+                    );
 
 
-            const w1 =
-                Math.min(
-                    100,
-                    (v1 / NPK_SCALE_MAX) * 100
-                );
+                const v2 =
+                    Number(
+                        data.node2[
+                            nutrient.key
+                        ]
+                    );
 
 
-            const w2 =
-                Math.min(
-                    100,
-                    (v2 / NPK_SCALE_MAX) * 100
-                );
+                const w1 =
+                    Math.min(
+                        100,
+                        (
+                            v1 /
+                            NPK_SCALE_MAX
+                        ) *
+                        100
+                    );
 
 
-            return `
-
-                <div class="npk-row">
-
-                    <div class="npk-row-head">
-
-                        <span class="nutrient-name">
-                            ${nutrient.label}
-                        </span>
-
-                        <span>
-                            mg/kg
-                        </span>
-
-                    </div>
+                const w2 =
+                    Math.min(
+                        100,
+                        (
+                            v2 /
+                            NPK_SCALE_MAX
+                        ) *
+                        100
+                    );
 
 
-                    <div class="npk-bars">
+                return `
 
-                        <div class="npk-bar-line">
+                    <div class="npk-row">
 
-                            <span class="node-key">
-                                Node 1
+                        <div class="npk-row-head">
+
+                            <span class="nutrient-name">
+                                ${nutrient.label}
                             </span>
 
-                            <span class="npk-bar-track">
-
-                                <span
-                                    class="npk-bar-fill n1"
-                                    style="width:${w1}%"
-                                ></span>
-
-                            </span>
-
-                            <span class="npk-bar-value">
-                                ${v1}
+                            <span>
+                                mg/kg
                             </span>
 
                         </div>
 
 
-                        <div class="npk-bar-line">
+                        <div class="npk-bars">
 
-                            <span class="node-key">
-                                Node 2
-                            </span>
 
-                            <span class="npk-bar-track">
+                            <div class="npk-bar-line">
 
-                                <span
-                                    class="npk-bar-fill n2"
-                                    style="width:${w2}%"
-                                ></span>
+                                <span class="node-key">
+                                    Node 1
+                                </span>
 
-                            </span>
+                                <span class="npk-bar-track">
 
-                            <span class="npk-bar-value">
-                                ${v2}
-                            </span>
+                                    <span
+                                        class="npk-bar-fill n1"
+                                        style="width:${w1}%"
+                                    ></span>
+
+                                </span>
+
+                                <span class="npk-bar-value">
+                                    ${v1}
+                                </span>
+
+                            </div>
+
+
+                            <div class="npk-bar-line">
+
+                                <span class="node-key">
+                                    Node 2
+                                </span>
+
+                                <span class="npk-bar-track">
+
+                                    <span
+                                        class="npk-bar-fill n2"
+                                        style="width:${w2}%"
+                                    ></span>
+
+                                </span>
+
+                                <span class="npk-bar-value">
+                                    ${v2}
+                                </span>
+
+                            </div>
+
 
                         </div>
 
                     </div>
 
-                </div>
+                `;
 
-            `;
+            }
+        ).join("");
 
-        }).join("");
 }
 
 
 /* ================================================================
-   11. ALERT RENDERER
+   14. ALERT RENDERER
 ================================================================ */
 
-function renderAlerts(data) {
+function renderAlerts(
+    data
+) {
 
     const alerts =
         generateAlerts(data);
@@ -1163,48 +1790,61 @@ function renderAlerts(data) {
 
 
     if (!list) {
+
         return;
+
     }
 
 
     list.innerHTML =
-        alerts.map(alert => {
+        alerts.map(
+            alert => {
 
-            return `
+                return `
 
-                <li class="alert-item ${alert.type}">
+                    <li
+                        class="alert-item ${alert.type}"
+                    >
 
-                    <span class="a-icon">
-                        ${
-                            alert.type === "warning"
-                                ? "⚠"
-                                : "✓"
-                        }
-                    </span>
+                        <span class="a-icon">
 
-                    <span>
+                            ${
+                                alert.type ===
+                                "warning"
+                                    ? "⚠"
+                                    : "✓"
+                            }
 
-                        <span class="a-node">
-                            ${alert.node}:
                         </span>
 
-                        ${alert.message}
 
-                    </span>
+                        <span>
 
-                </li>
+                            <span class="a-node">
+                                ${alert.node}:
+                            </span>
 
-            `;
+                            ${alert.message}
 
-        }).join("");
+                        </span>
+
+                    </li>
+
+                `;
+
+            }
+        ).join("");
+
 }
 
 
 /* ================================================================
-   12. NODE COMPARISON TABLE
+   15. NODE COMPARISON TABLE
 ================================================================ */
 
-function renderComparison(data) {
+function renderComparison(
+    data
+) {
 
     const rows = [
 
@@ -1281,63 +1921,90 @@ function renderComparison(data) {
 
 
     if (!body) {
+
         return;
+
     }
 
 
     body.innerHTML =
-        rows.map(row => {
+        rows.map(
+            row => {
 
-            const node1Value =
-                Number(
-                    data.node1[row.key]
-                );
-
-
-            const node2Value =
-                Number(
-                    data.node2[row.key]
-                );
+                const node1Value =
+                    Number(
+                        data.node1[
+                            row.key
+                        ]
+                    );
 
 
-            return `
+                const node2Value =
+                    Number(
+                        data.node2[
+                            row.key
+                        ]
+                    );
 
-                <tr>
 
-                    <td>
-                        ${row.label}
-                    </td>
+                return `
 
-                    <td>
-                        ${
-                            Number.isNaN(node1Value)
+                    <tr>
+
+                        <td>
+                            ${row.label}
+                        </td>
+
+                        <td>
+
+                            ${
+                                Number.isNaN(
+                                    node1Value
+                                )
+
                                 ? "--"
-                                : node1Value.toFixed(
-                                    row.decimals
-                                ) + row.unit
-                        }
-                    </td>
 
-                    <td>
-                        ${
-                            Number.isNaN(node2Value)
+                                :
+
+                                node1Value.toFixed(
+                                    row.decimals
+                                ) +
+                                row.unit
+                            }
+
+                        </td>
+
+                        <td>
+
+                            ${
+                                Number.isNaN(
+                                    node2Value
+                                )
+
                                 ? "--"
-                                : node2Value.toFixed(
+
+                                :
+
+                                node2Value.toFixed(
                                     row.decimals
-                                ) + row.unit
-                        }
-                    </td>
+                                ) +
+                                row.unit
+                            }
 
-                </tr>
+                        </td>
 
-            `;
+                    </tr>
 
-        }).join("");
+                `;
+
+            }
+        ).join("");
+
 }
 
 
 /* ================================================================
-   13. GATEWAY CONNECTION STATUS
+   16. GATEWAY CONNECTION STATUS
 ================================================================ */
 
 function setGatewayStatus(
@@ -1351,7 +2018,9 @@ function setGatewayStatus(
 
 
     if (!pill) {
+
         return;
+
     }
 
 
@@ -1381,11 +2050,12 @@ function setGatewayStatus(
                 : "Gateway Offline";
 
     }
+
 }
 
 
 /* ================================================================
-   14. LAST UPDATED TIME
+   17. LAST UPDATED TIME
 ================================================================ */
 
 function updateLastUpdatedTime() {
@@ -1397,7 +2067,9 @@ function updateLastUpdatedTime() {
 
 
     if (!element) {
+
         return;
+
     }
 
 
@@ -1410,11 +2082,12 @@ function updateLastUpdatedTime() {
                 second: "2-digit"
             }
         );
+
 }
 
 
 /* ================================================================
-   15. OPTIONAL LIVE CONNECTION INDICATOR
+   18. OPTIONAL LIVE CONNECTION INDICATOR
 ================================================================ */
 
 function updateConnectionStatus(
@@ -1433,15 +2106,10 @@ function updateConnectionStatus(
         );
 
 
-    /*
-       These elements are optional.
-
-       If they don't exist in index.html,
-       the function simply does nothing.
-    */
-
     if (!statusElement) {
+
         return;
+
     }
 
 
@@ -1459,11 +2127,14 @@ function updateConnectionStatus(
 
             timeElement.textContent =
                 "Last updated: " +
-                new Date().toLocaleTimeString();
+                new Date()
+                    .toLocaleTimeString();
 
         }
 
-    } else {
+    }
+
+    else {
 
         statusElement.textContent =
             "● OFFLINE";
@@ -1473,26 +2144,57 @@ function updateConnectionStatus(
             "connection-offline";
 
     }
+
 }
 
 
 /* ================================================================
-   16. MAIN DASHBOARD UPDATE
+   19. MAIN DASHBOARD UPDATE
 ================================================================ */
 
 async function updateDashboard() {
 
     try {
 
-        // Get LIVE data from FastAPI
+        /*
+           =========================================================
+           STEP 1 — GET LIVE SENSOR DATA
+           =========================================================
+        */
+
         const data = await fetchFarmData();
 
-        console.log("Live farm data:", data);
+        const aiNode1 = await fetchAIPrediction(1);
+        const aiNode2 = await fetchAIPrediction(2);
 
 
-        // ================================
-        // NODE 1
-        // ================================
+        console.log(
+            "Live farm data:",
+            data
+        );
+
+
+        /*
+           =========================================================
+           STEP 2 — GET AI PREDICTIONS
+           =========================================================
+        */
+
+        const aiResults =
+            await fetchAllAIPredictions();
+
+
+        console.log(
+            "AI predictions:",
+            aiResults
+        );
+
+
+        /*
+           =========================================================
+           STEP 3 — NODE 1
+           =========================================================
+        */
 
         const node1Result =
             renderNodeCard(
@@ -1501,9 +2203,11 @@ async function updateDashboard() {
             );
 
 
-        // ================================
-        // NODE 2
-        // ================================
+        /*
+           =========================================================
+           STEP 4 — NODE 2
+           =========================================================
+        */
 
         const node2Result =
             renderNodeCard(
@@ -1512,70 +2216,108 @@ async function updateDashboard() {
             );
 
 
-        // ================================
-        // FERTILIZER RECOMMENDATIONS
-        // ================================
+        /*
+           =========================================================
+           STEP 5 — AI + FERTILIZER RECOMMENDATIONS
+           =========================================================
+        */
 
         const recommendations =
             document.getElementById(
                 "recommendGrid"
             );
 
+
         if (recommendations) {
 
             recommendations.innerHTML =
 
                 renderRecommendation(
+
                     "node1",
+
                     data.node1,
-                    node1Result.status
+
+                    node1Result.status,
+
+                    aiResults.node1
+
                 )
 
                 +
 
                 renderRecommendation(
+
                     "node2",
+
                     data.node2,
-                    node2Result.status
+
+                    node2Result.status,
+
+                    aiResults.node2
+
                 );
 
-        } else {
+        }
+
+        else {
 
             console.error(
-                "Could not find element with id='recommendations'"
+                "Could not find element with " +
+                "id='recommendGrid'"
             );
 
         }
 
 
-        // ================================
-        // NPK
-        // ================================
+        /*
+           =========================================================
+           STEP 6 — NPK
+           =========================================================
+        */
 
-        renderNPK(data);
-
-
-        // ================================
-        // SMART ALERTS
-        // ================================
-
-        renderAlerts(data);
+        renderNPK(
+            data
+        );
 
 
-        // ================================
-        // NODE COMPARISON
-        // ================================
+        /*
+           =========================================================
+           STEP 7 — ALERTS
+           =========================================================
+        */
 
-        renderComparison(data);
+        renderAlerts(
+            data
+        );
 
 
-        // ================================
-        // CONNECTION STATUS
-        // ================================
+        /*
+           =========================================================
+           STEP 8 — COMPARISON
+           =========================================================
+        */
 
-        setGatewayStatus(true);
+        renderComparison(
+            data
+        );
 
-        updateConnectionStatus(true);
+
+        /*
+           =========================================================
+           STEP 9 — CONNECTION STATUS
+           =========================================================
+        */
+
+        setGatewayStatus(
+            true
+        );
+
+
+        updateConnectionStatus(
+            true
+        );
+
 
         updateLastUpdatedTime();
 
@@ -1584,17 +2326,25 @@ async function updateDashboard() {
             "Dashboard updated successfully."
         );
 
+    }
 
-    } catch (error) {
+
+    catch (error) {
 
         console.error(
             "Dashboard update failed:",
             error
         );
 
-        setGatewayStatus(false);
 
-        updateConnectionStatus(false);
+        setGatewayStatus(
+            false
+        );
+
+
+        updateConnectionStatus(
+            false
+        );
 
     }
 
@@ -1602,7 +2352,7 @@ async function updateDashboard() {
 
 
 /* ================================================================
-   17. INITIALIZATION + AUTOMATIC REFRESH
+   20. INITIALIZATION + AUTOMATIC REFRESH
 ================================================================ */
 
 document.addEventListener(
@@ -1610,14 +2360,21 @@ document.addEventListener(
     () => {
 
         /*
-           Load immediately
+           Initial load.
         */
 
         updateDashboard();
 
 
         /*
-           Refresh every 5 seconds
+           Refresh every 5 seconds.
+
+           This means:
+           - sensor values update
+           - AI predictions update
+           - recommendations update
+           - alerts update
+           - NPK comparison updates
         */
 
         setInterval(
