@@ -265,23 +265,23 @@ flowchart TD
 The ML model classifies soil health; the condition/recommendation layer checks field parameters and produces actionable guidance.
 
 ```mermaid
-flowchart TB
+flowchart TD
     LIVE["Live Sensor Data"]
     RF["Random Forest"]
     HEALTH["Soil Health Classification"]
     CHECK["Condition Analysis"]
-    M["Moisture Check"]
+    MOIST["Moisture Check"]
     PH["pH Check"]
-    NPK["NPK / EC Check"]
+    NPK["NPK and EC Check"]
     REC["Recommendation"]
 
     LIVE --> RF
     RF --> HEALTH
     HEALTH --> CHECK
-    CHECK --> M
+    CHECK --> MOIST
     CHECK --> PH
     CHECK --> NPK
-    M --> REC
+    MOIST --> REC
     PH --> REC
     NPK --> REC
 ```
