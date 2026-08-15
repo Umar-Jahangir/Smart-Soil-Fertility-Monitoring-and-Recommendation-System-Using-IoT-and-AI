@@ -1,6 +1,8 @@
 /* ================================================================
    SMART FARM SOIL MONITORING SYSTEM — script.js
 
+   COMPLETE DASHBOARD VERSION
+
    DATA FLOW:
 
    ESP32 Nodes
@@ -11,17 +13,27 @@
         ↓
    FastAPI Backend
         ↓
-   ┌───────────────────────────────┐
-   │                               │
-   │ /api/farm-data                │
-   │ /api/ai/predict/1             │
-   │ /api/ai/predict/2             │
-   │                               │
-   └───────────────┬───────────────┘
-                   ↓
-              This Dashboard
+   ┌───────────────────────────────────────┐
+   │                                       │
+   │ /api/farm-data                        │
+   │ /api/ai/predict/1                     │
+   │ /api/ai/predict/2                     │
+   │                                       │
+   └───────────────────┬───────────────────┘
+                       ↓
+                  Web Dashboard
 
-   LIVE SENSOR DATA + AI PREDICTIONS
+   FEATURES:
+   1. Live sensor data
+   2. Random Forest AI prediction
+   3. AI + rule-based recommendations
+   4. Node soil-health scores
+   5. Farm-level health score
+   6. NPK fertilizer recommendations
+   7. Alerts
+   8. Historical readings using localStorage
+   9. Trend display
+   10. Robust sensor-error handling
 ================================================================ */
 
 
@@ -34,109 +46,128 @@ const API_BASE_URL =
 
 
 /* ================================================================
-   2. LIVE FARM DATA
+   2. APPLICATION CONFIGURATION
+================================================================ */
+
+const REFRESH_INTERVAL =
+    5000;
+
+const HISTORY_STORAGE_KEY =
+    "smartFarmHistory";
+
+const MAX_HISTORY_POINTS =
+    30;
+
+
+/*
+   Node 2 currently has DS18B20 disconnected.
+
+   -127°C is the standard invalid reading returned
+   by the DS18B20 when the sensor is not available.
+*/
+
+const INVALID_SOIL_TEMPERATURE =
+    -127;
+
+
+/* ================================================================
+   3. LIVE FARM DATA
 ================================================================ */
 
 async function fetchFarmData() {
-    const response = await fetch(
-        "http://127.0.0.1:8000/api/farm-data",
-        {
-            cache: "no-store"
-        }
-    );
+
+    const response =
+        await fetch(
+            `${API_BASE_URL}/api/farm-data`,
+            {
+                cache: "no-store"
+            }
+        );
+
 
     if (!response.ok) {
+
         throw new Error(
             `Backend returned ${response.status}`
         );
+
     }
 
+
     return await response.json();
+
 }
 
 
 /* ================================================================
-   3. AI PREDICTION
+   4. AI PREDICTION
 ================================================================ */
 
-/*
-   Fetch AI prediction for a specific node.
+async function fetchAIPrediction(
+    nodeId
+) {
 
-   nodeId:
-       1 → Node 1
-       2 → Node 2
+    const response =
+        await fetch(
+            `${API_BASE_URL}/api/ai/predict/${nodeId}`,
+            {
+                cache: "no-store"
+            }
+        );
 
-   Backend endpoint:
-       GET /api/ai/predict/{node_id}
-*/
-
-async function fetchAIPrediction(nodeId) {
-    const response = await fetch(
-        `http://127.0.0.1:8000/api/ai/predict/${nodeId}`,
-        {
-            cache: "no-store"
-        }
-    );
 
     if (!response.ok) {
+
         throw new Error(
             `AI API returned ${response.status}`
         );
+
     }
 
+
     return await response.json();
+
 }
 
 
 /*
-   Fetch AI predictions for both nodes.
+   Fetch predictions for both nodes.
 
-   If one prediction fails, the other node can still
-   continue working.
+   Promise.allSettled() is used so that if one node
+   fails, the other node can still be displayed.
 */
 
 async function fetchAllAIPredictions() {
 
-    const results = {
-        node1: null,
-        node2: null
+    const results =
+        await Promise.allSettled([
+
+            fetchAIPrediction(1),
+
+            fetchAIPrediction(2)
+
+        ]);
+
+
+    return {
+
+        node1:
+            results[0].status === "fulfilled"
+                ? results[0].value
+                : null,
+
+        node2:
+            results[1].status === "fulfilled"
+                ? results[1].value
+                : null
+
     };
 
-
-    try {
-
-        results.node1 =
-            await fetchAIPrediction(1);
-
-    } catch (error) {
-
-        console.error(
-            "Node 1 AI prediction failed:",
-            error
-        );
-    }
-
-
-    try {
-
-        results.node2 =
-            await fetchAIPrediction(2);
-
-    } catch (error) {
-
-        console.error(
-            "Node 2 AI prediction failed:",
-            error
-        );
-    }
-
-
-    return results;
 }
 
 
 /* ================================================================
-   4. METRIC / THRESHOLD CONFIG
+   5. METRIC / THRESHOLD CONFIGURATION
 ================================================================ */
 
 const METRICS = [
@@ -234,7 +265,8 @@ const METRICS = [
 ];
 
 
-const NPK_SCALE_MAX = 100;
+const NPK_SCALE_MAX =
+    100;
 
 
 const NODE_LABELS = {
@@ -247,7 +279,7 @@ const NODE_LABELS = {
 
 
 /* ================================================================
-   5. ICONS
+   6. ICONS
 ================================================================ */
 
 const ICONS = {
@@ -294,10 +326,56 @@ const ICONS = {
 
 
 /* ================================================================
-   6. EXISTING SOIL HEALTH SCORE
+   7. UTILITY FUNCTIONS
 ================================================================ */
 
-function computeSoilHealthScore(nodeData) {
+function safeNumber(
+    value,
+    fallback = null
+) {
+
+    const number =
+        Number(value);
+
+
+    return Number.isFinite(number)
+        ? number
+        : fallback;
+
+}
+
+
+function isValidSoilTemperature(
+    value
+) {
+
+    const temperature =
+        safeNumber(value);
+
+
+    return (
+        temperature !== null &&
+        temperature !== INVALID_SOIL_TEMPERATURE
+    );
+
+}
+
+
+/* ================================================================
+   8. SOIL HEALTH SCORE
+================================================================ */
+
+function computeSoilHealthScore(
+    nodeData
+) {
+
+    /*
+       pH is intentionally excluded from the numerical
+       soil-condition score because Node 1's pH probe
+       is currently being tested in buffer solution.
+
+       pH is still used for recommendations and alerts.
+    */
 
     const parameters = [
 
@@ -307,12 +385,6 @@ function computeSoilHealthScore(nodeData) {
             max: 65,
             weight: 15
         },
-
-        /*
-           pH temporarily excluded because the Node 1
-           pH probe is currently being tested in buffer
-           solution.
-        */
 
         {
             key: "ec",
@@ -366,7 +438,7 @@ function computeSoilHealthScore(nodeData) {
     ];
 
 
-    let totalScore = 0;
+    let weightedScore = 0;
 
     let totalWeight = 0;
 
@@ -375,14 +447,14 @@ function computeSoilHealthScore(nodeData) {
         parameter => {
 
             const value =
-                Number(
+                safeNumber(
                     nodeData[
                         parameter.key
                     ]
                 );
 
 
-            if (Number.isNaN(value)) {
+            if (value === null) {
 
                 return;
 
@@ -390,13 +462,17 @@ function computeSoilHealthScore(nodeData) {
 
 
             /*
-               Ignore invalid DS18B20 reading.
+               Ignore disconnected DS18B20.
             */
 
             if (
+
                 parameter.key ===
                 "soilTemperature" &&
-                value === -127
+
+                value ===
+                INVALID_SOIL_TEMPERATURE
+
             ) {
 
                 return;
@@ -404,12 +480,13 @@ function computeSoilHealthScore(nodeData) {
             }
 
 
-            let parameterScore = 100;
-
-
             const range =
                 parameter.max -
                 parameter.min;
+
+
+            let parameterScore =
+                100;
 
 
             if (
@@ -420,6 +497,7 @@ function computeSoilHealthScore(nodeData) {
                 const distance =
                     parameter.min -
                     value;
+
 
                 parameterScore =
                     Math.max(
@@ -444,6 +522,7 @@ function computeSoilHealthScore(nodeData) {
                     value -
                     parameter.max;
 
+
                 parameterScore =
                     Math.max(
                         0,
@@ -458,12 +537,9 @@ function computeSoilHealthScore(nodeData) {
             }
 
 
-            totalScore +=
+            weightedScore +=
                 parameterScore *
-                (
-                    parameter.weight /
-                    100
-                );
+                parameter.weight;
 
 
             totalWeight +=
@@ -482,21 +558,14 @@ function computeSoilHealthScore(nodeData) {
     }
 
 
-    const normalizedScore =
-        totalScore /
-        (
-            totalWeight /
-            100
-        );
-
-
     return Math.round(
 
         Math.max(
             0,
             Math.min(
                 100,
-                normalizedScore
+                weightedScore /
+                totalWeight
             )
         )
 
@@ -505,7 +574,9 @@ function computeSoilHealthScore(nodeData) {
 }
 
 
-function scoreToStatus(score) {
+function scoreToStatus(
+    score
+) {
 
     if (
         score >= 75
@@ -531,28 +602,209 @@ function scoreToStatus(score) {
 
 
 /* ================================================================
-   7. FERTILIZER RECOMMENDATION
+   9. AI STATUS HELPERS
+================================================================ */
+
+function getAIStatusClass(
+    prediction
+) {
+
+    if (!prediction) {
+
+        return "attention";
+
+    }
+
+
+    const value =
+        String(
+            prediction
+        ).toLowerCase();
+
+
+    if (
+        value === "healthy"
+    ) {
+
+        return "healthy";
+
+    }
+
+
+    if (
+        value === "moderate"
+    ) {
+
+        return "moderate";
+
+    }
+
+
+    return "attention";
+
+}
+
+
+function getAIStatusText(
+    prediction
+) {
+
+    if (!prediction) {
+
+        return "AI Unavailable";
+
+    }
+
+
+    return String(
+        prediction
+    );
+
+}
+
+
+function formatAIConfidence(
+    confidence
+) {
+
+    const value =
+        safeNumber(
+            confidence
+        );
+
+
+    if (
+        value === null
+    ) {
+
+        return "--";
+
+    }
+
+
+    return `${value.toFixed(1)}%`;
+
+}
+
+
+/* ================================================================
+   10. NPK FERTILIZER ANALYSIS
+================================================================ */
+
+function analyzeNPK(
+    nodeData
+) {
+
+    const nitrogen =
+        safeNumber(
+            nodeData.nitrogen
+        );
+
+    const phosphorus =
+        safeNumber(
+            nodeData.phosphorus
+        );
+
+    const potassium =
+        safeNumber(
+            nodeData.potassium
+        );
+
+
+    const deficiencies = [];
+
+
+    if (
+        nitrogen !== null &&
+        nitrogen < 40
+    ) {
+
+        deficiencies.push({
+            nutrient: "Nitrogen",
+            value: nitrogen,
+            priority: 1
+        });
+
+    }
+
+
+    if (
+        phosphorus !== null &&
+        phosphorus < 25
+    ) {
+
+        deficiencies.push({
+            nutrient: "Phosphorus",
+            value: phosphorus,
+            priority: 2
+        });
+
+    }
+
+
+    if (
+        potassium !== null &&
+        potassium < 35
+    ) {
+
+        deficiencies.push({
+            nutrient: "Potassium",
+            value: potassium,
+            priority: 3
+        });
+
+    }
+
+
+    deficiencies.sort(
+        (a, b) =>
+            a.priority -
+            b.priority
+    );
+
+
+    return deficiencies;
+
+}
+
+
+/* ================================================================
+   11. COMBINED RECOMMENDATION ENGINE
 ================================================================ */
 
 function generateRecommendation(
     nodeData,
-    status
+    aiPrediction
 ) {
 
     const recommendations = [];
 
 
+    const prediction =
+        aiPrediction?.prediction ||
+        null;
+
+
+    const confidence =
+        safeNumber(
+            aiPrediction?.confidence
+        );
+
+
     /*
-       1. pH
+       -------------------------------------------------------------
+       PH
+       -------------------------------------------------------------
     */
 
     const ph =
-        Number(
+        safeNumber(
             nodeData.pH
         );
 
 
     if (
+        ph !== null &&
         ph < 6.0
     ) {
 
@@ -562,13 +814,15 @@ function generateRecommendation(
 
             text:
                 `Soil pH is low (${ph.toFixed(2)}). ` +
-                `Focus on correcting soil acidity before increasing fertilizer application.`
+                `Correct soil acidity before increasing fertilizer application.`
 
         });
 
     }
 
+
     else if (
+        ph !== null &&
         ph > 7.5
     ) {
 
@@ -586,16 +840,19 @@ function generateRecommendation(
 
 
     /*
-       2. MOISTURE
+       -------------------------------------------------------------
+       MOISTURE
+       -------------------------------------------------------------
     */
 
     const moisture =
-        Number(
+        safeNumber(
             nodeData.moisture
         );
 
 
     if (
+        moisture !== null &&
         moisture < 35
     ) {
 
@@ -611,7 +868,9 @@ function generateRecommendation(
 
     }
 
+
     else if (
+        moisture !== null &&
         moisture > 65
     ) {
 
@@ -629,26 +888,66 @@ function generateRecommendation(
 
 
     /*
-       3. NITROGEN
+       -------------------------------------------------------------
+       NPK
+       -------------------------------------------------------------
     */
 
-    const nitrogen =
-        Number(
-            nodeData.nitrogen
+    const npkDeficiencies =
+        analyzeNPK(
+            nodeData
         );
 
 
     if (
-        nitrogen < 40
+        npkDeficiencies.length > 0
     ) {
+
+        const deficiency =
+            npkDeficiencies[0];
+
+
+        let fertilizerText;
+
+
+        if (
+            deficiency.nutrient ===
+            "Nitrogen"
+        ) {
+
+            fertilizerText =
+                "Consider a nitrogen-rich fertilizer according to crop requirements.";
+
+        }
+
+
+        else if (
+            deficiency.nutrient ===
+            "Phosphorus"
+        ) {
+
+            fertilizerText =
+                "Consider a phosphorus-rich fertilizer according to crop requirements.";
+
+        }
+
+
+        else {
+
+            fertilizerText =
+                "Consider a potassium-rich fertilizer according to crop requirements.";
+
+        }
+
 
         recommendations.push({
 
             priority: 3,
 
             text:
-                `Nitrogen is low (${nitrogen.toFixed(0)} mg/kg). ` +
-                `Consider a nitrogen-rich fertilizer according to crop requirements.`
+                `${deficiency.nutrient} is low ` +
+                `(${deficiency.value.toFixed(0)} mg/kg). ` +
+                fertilizerText
 
         });
 
@@ -656,70 +955,19 @@ function generateRecommendation(
 
 
     /*
-       4. PHOSPHORUS
-    */
-
-    const phosphorus =
-        Number(
-            nodeData.phosphorus
-        );
-
-
-    if (
-        phosphorus < 25
-    ) {
-
-        recommendations.push({
-
-            priority: 3,
-
-            text:
-                `Phosphorus is low (${phosphorus.toFixed(0)} mg/kg). ` +
-                `Consider a phosphorus-rich fertilizer according to crop requirements.`
-
-        });
-
-    }
-
-
-    /*
-       5. POTASSIUM
-    */
-
-    const potassium =
-        Number(
-            nodeData.potassium
-        );
-
-
-    if (
-        potassium < 35
-    ) {
-
-        recommendations.push({
-
-            priority: 3,
-
-            text:
-                `Potassium is low (${potassium.toFixed(0)} mg/kg). ` +
-                `Consider a potassium-rich fertilizer according to crop requirements.`
-
-        });
-
-    }
-
-
-    /*
-       6. EC
+       -------------------------------------------------------------
+       EC
+       -------------------------------------------------------------
     */
 
     const ec =
-        Number(
+        safeNumber(
             nodeData.ec
         );
 
 
     if (
+        ec !== null &&
         ec < 1.0
     ) {
 
@@ -735,7 +983,9 @@ function generateRecommendation(
 
     }
 
+
     else if (
+        ec !== null &&
         ec > 2.0
     ) {
 
@@ -753,42 +1003,193 @@ function generateRecommendation(
 
 
     /*
-       No issues.
+       -------------------------------------------------------------
+       AI CONTEXT
+       -------------------------------------------------------------
     */
 
+    let aiContext = "";
+
+
     if (
-        recommendations.length === 0
+        prediction &&
+        confidence !== null
     ) {
 
-        return (
-            "All monitored soil parameters are within " +
-            "the target range. Maintain the current " +
-            "fertigation and irrigation schedule."
-        );
+        aiContext =
+            `AI model classifies the soil as ${prediction} ` +
+            `with ${confidence.toFixed(1)}% confidence.`;
 
     }
 
 
+    /*
+       -------------------------------------------------------------
+       IMPORTANT:
+       If moisture is extremely low, irrigation takes precedence
+       over fertilizer application.
+       -------------------------------------------------------------
+    */
+
+    if (
+        moisture !== null &&
+        moisture < 20
+    ) {
+
+        return {
+
+            text:
+                `Soil moisture is critically low ` +
+                `(${moisture.toFixed(1)}%). ` +
+                `Irrigate before applying fertilizer.`,
+
+            aiContext,
+
+            priority: 1
+
+        };
+
+    }
+
+
+    /*
+       -------------------------------------------------------------
+       ACTIONABLE RECOMMENDATION
+       -------------------------------------------------------------
+    */
+
     recommendations.sort(
-        (
-            a,
-            b
-        ) =>
+        (a, b) =>
             a.priority -
             b.priority
     );
 
 
-    return recommendations[0].text;
+    if (
+        recommendations.length > 0
+    ) {
+
+        return {
+
+            text:
+                recommendations[0].text,
+
+            aiContext,
+
+            priority:
+                recommendations[0].priority
+
+        };
+
+    }
+
+
+    /*
+       -------------------------------------------------------------
+       NO ISSUES
+       -------------------------------------------------------------
+    */
+
+    return {
+
+        text:
+            "All monitored soil parameters are within the target range. Maintain the current irrigation and fertigation schedule.",
+
+        aiContext,
+
+        priority: 5
+
+    };
 
 }
 
 
 /* ================================================================
-   8. ALERT GENERATION
+   12. FARM-LEVEL HEALTH SCORE
 ================================================================ */
 
-function generateAlerts(data) {
+function computeFarmHealthScore(
+    nodeResults
+) {
+
+    const validScores =
+        nodeResults
+            .filter(
+                result =>
+                    result &&
+                    Number.isFinite(
+                        result.score
+                    )
+            )
+            .map(
+                result =>
+                    result.score
+            );
+
+
+    if (
+        validScores.length === 0
+    ) {
+
+        return 0;
+
+    }
+
+
+    const total =
+        validScores.reduce(
+            (sum, score) =>
+                sum + score,
+            0
+        );
+
+
+    return Math.round(
+        total /
+        validScores.length
+    );
+
+}
+
+
+/* ================================================================
+   13. FARM STATUS
+================================================================ */
+
+function getFarmStatus(
+    score
+) {
+
+    if (
+        score >= 75
+    ) {
+
+        return "Healthy";
+
+    }
+
+
+    if (
+        score >= 50
+    ) {
+
+        return "Moderate";
+
+    }
+
+
+    return "Needs Attention";
+
+}
+
+
+/* ================================================================
+   14. ALERT GENERATION
+================================================================ */
+
+function generateAlerts(
+    data
+) {
 
     const alerts = [];
 
@@ -808,20 +1209,18 @@ function generateAlerts(data) {
 
 
             /*
-               SOIL MOISTURE
+               MOISTURE
             */
 
             const moisture =
-                METRICS.find(
-                    m =>
-                        m.key ===
-                        "moisture"
+                safeNumber(
+                    nodeData.moisture
                 );
 
 
             if (
-                nodeData.moisture <
-                moisture.min
+                moisture !== null &&
+                moisture < 35
             ) {
 
                 alerts.push({
@@ -831,7 +1230,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Soil moisture is low (${nodeData.moisture.toFixed(1)}%). ` +
+                        `Soil moisture is low (${moisture.toFixed(1)}%). ` +
                         `Irrigation may be required.`
 
                 });
@@ -843,8 +1242,8 @@ function generateAlerts(data) {
 
 
             else if (
-                nodeData.moisture >
-                moisture.max
+                moisture !== null &&
+                moisture > 65
             ) {
 
                 alerts.push({
@@ -854,7 +1253,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Soil moisture is high (${nodeData.moisture.toFixed(1)}%). ` +
+                        `Soil moisture is high (${moisture.toFixed(1)}%). ` +
                         `Check for over-irrigation.`
 
                 });
@@ -866,19 +1265,18 @@ function generateAlerts(data) {
 
 
             /*
-               pH
+               PH
             */
 
             const ph =
-                METRICS.find(
-                    m =>
-                        m.key === "pH"
+                safeNumber(
+                    nodeData.pH
                 );
 
 
             if (
-                nodeData.pH <
-                ph.min
+                ph !== null &&
+                ph < 6.0
             ) {
 
                 alerts.push({
@@ -888,7 +1286,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Soil pH is too low (${nodeData.pH.toFixed(2)}). ` +
+                        `Soil pH is too low (${ph.toFixed(2)}). ` +
                         `Consider measures to increase soil pH.`
 
                 });
@@ -900,8 +1298,8 @@ function generateAlerts(data) {
 
 
             else if (
-                nodeData.pH >
-                ph.max
+                ph !== null &&
+                ph > 7.5
             ) {
 
                 alerts.push({
@@ -911,7 +1309,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Soil pH is too high (${nodeData.pH.toFixed(2)}). ` +
+                        `Soil pH is too high (${ph.toFixed(2)}). ` +
                         `Consider measures to reduce soil pH.`
 
                 });
@@ -927,15 +1325,14 @@ function generateAlerts(data) {
             */
 
             const ec =
-                METRICS.find(
-                    m =>
-                        m.key === "ec"
+                safeNumber(
+                    nodeData.ec
                 );
 
 
             if (
-                nodeData.ec <
-                ec.min
+                ec !== null &&
+                ec < 1.0
             ) {
 
                 alerts.push({
@@ -945,7 +1342,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `EC is low (${nodeData.ec.toFixed(2)} dS/m). ` +
+                        `EC is low (${ec.toFixed(2)} dS/m). ` +
                         `Nutrient availability may be low.`
 
                 });
@@ -957,8 +1354,8 @@ function generateAlerts(data) {
 
 
             else if (
-                nodeData.ec >
-                ec.max
+                ec !== null &&
+                ec > 2.0
             ) {
 
                 alerts.push({
@@ -968,7 +1365,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `EC is high (${nodeData.ec.toFixed(2)} dS/m). ` +
+                        `EC is high (${ec.toFixed(2)} dS/m). ` +
                         `Possible excess salts or fertilizer concentration.`
 
                 });
@@ -984,16 +1381,14 @@ function generateAlerts(data) {
             */
 
             const nitrogen =
-                METRICS.find(
-                    m =>
-                        m.key ===
-                        "nitrogen"
+                safeNumber(
+                    nodeData.nitrogen
                 );
 
 
             if (
-                nodeData.nitrogen <
-                nitrogen.min
+                nitrogen !== null &&
+                nitrogen < 40
             ) {
 
                 alerts.push({
@@ -1003,7 +1398,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Nitrogen level is low (${nodeData.nitrogen.toFixed(0)} mg/kg).`
+                        `Nitrogen level is low (${nitrogen.toFixed(0)} mg/kg).`
 
                 });
 
@@ -1018,16 +1413,14 @@ function generateAlerts(data) {
             */
 
             const phosphorus =
-                METRICS.find(
-                    m =>
-                        m.key ===
-                        "phosphorus"
+                safeNumber(
+                    nodeData.phosphorus
                 );
 
 
             if (
-                nodeData.phosphorus <
-                phosphorus.min
+                phosphorus !== null &&
+                phosphorus < 25
             ) {
 
                 alerts.push({
@@ -1037,7 +1430,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Phosphorus level is low (${nodeData.phosphorus.toFixed(0)} mg/kg).`
+                        `Phosphorus level is low (${phosphorus.toFixed(0)} mg/kg).`
 
                 });
 
@@ -1052,16 +1445,14 @@ function generateAlerts(data) {
             */
 
             const potassium =
-                METRICS.find(
-                    m =>
-                        m.key ===
-                        "potassium"
+                safeNumber(
+                    nodeData.potassium
                 );
 
 
             if (
-                nodeData.potassium <
-                potassium.min
+                potassium !== null &&
+                potassium < 35
             ) {
 
                 alerts.push({
@@ -1071,7 +1462,7 @@ function generateAlerts(data) {
                     type: "warning",
 
                     message:
-                        `Potassium level is low (${nodeData.potassium.toFixed(0)} mg/kg).`
+                        `Potassium level is low (${potassium.toFixed(0)} mg/kg).`
 
                 });
 
@@ -1086,28 +1477,25 @@ function generateAlerts(data) {
             */
 
             const soilTemperature =
-                METRICS.find(
-                    m =>
-                        m.key ===
-                        "soilTemperature"
+                safeNumber(
+                    nodeData.soilTemperature
                 );
 
 
             /*
-               Ignore -127 °C DS18B20
-               error value.
+               Ignore -127°C.
             */
 
             if (
 
-                nodeData.soilTemperature !== -127 &&
+                soilTemperature !== null &&
+
+                soilTemperature !==
+                INVALID_SOIL_TEMPERATURE &&
 
                 (
-                    nodeData.soilTemperature <
-                    soilTemperature.min ||
-
-                    nodeData.soilTemperature >
-                    soilTemperature.max
+                    soilTemperature < 18 ||
+                    soilTemperature > 30
                 )
 
             ) {
@@ -1120,7 +1508,7 @@ function generateAlerts(data) {
 
                     message:
                         `Soil temperature is outside the target range ` +
-                        `(${nodeData.soilTemperature.toFixed(1)} °C).`
+                        `(${soilTemperature.toFixed(1)} °C).`
 
                 });
 
@@ -1131,7 +1519,7 @@ function generateAlerts(data) {
 
 
             /*
-               Everything normal.
+               NORMAL
             */
 
             if (
@@ -1161,7 +1549,7 @@ function generateAlerts(data) {
 
 
 /* ================================================================
-   9. VALUE FORMATTER
+   15. VALUE FORMATTER
 ================================================================ */
 
 function formatValue(
@@ -1170,14 +1558,35 @@ function formatValue(
 ) {
 
     const value =
-        Number(rawValue);
+        safeNumber(
+            rawValue
+        );
 
 
     if (
-        Number.isNaN(value)
+        value === null
     ) {
 
         return "--";
+
+    }
+
+
+    /*
+       Do not display -127 as an actual soil temperature.
+    */
+
+    if (
+
+        metric.key ===
+        "soilTemperature" &&
+
+        value ===
+        INVALID_SOIL_TEMPERATURE
+
+    ) {
+
+        return "N/A";
 
     }
 
@@ -1190,21 +1599,20 @@ function formatValue(
 
 
 /* ================================================================
-   10. NODE CARD
+   16. NODE CARD
 ================================================================ */
 
 function renderNodeCard(
     nodeKey,
-    nodeData
+    nodeData,
+    aiPrediction
 ) {
 
     const card =
         document.getElementById(
-
             nodeKey === "node1"
                 ? "node1Card"
                 : "node2Card"
-
         );
 
 
@@ -1237,7 +1645,9 @@ function renderNodeCard(
 
 
     const status =
-        scoreToStatus(score);
+        scoreToStatus(
+            score
+        );
 
 
     const statusText = {
@@ -1250,6 +1660,31 @@ function renderNodeCard(
 
     }[status];
 
+
+    /*
+       AI
+    */
+
+    const aiStatus =
+        aiPrediction?.prediction ||
+        "Unavailable";
+
+
+    const aiConfidence =
+        safeNumber(
+            aiPrediction?.confidence
+        );
+
+
+    const aiStatusClass =
+        getAIStatusClass(
+            aiStatus
+        );
+
+
+    /*
+       SENSOR TILES
+    */
 
     const sensorTiles =
         METRICS.map(
@@ -1316,12 +1751,90 @@ function renderNodeCard(
         </div>
 
 
+        <!-- AI SOIL HEALTH -->
+
+        <div class="ai-health-card">
+
+            <div class="ai-health-header">
+
+                <div>
+
+                    <span class="ai-health-label">
+                        AI Soil Health
+                    </span>
+
+                    <span class="ai-model-label">
+                        Random Forest
+                    </span>
+
+                </div>
+
+
+                <span class="
+                    ai-health-status
+                    ai-status-${aiStatusClass}
+                ">
+
+                    ${aiStatus}
+
+                </span>
+
+            </div>
+
+
+            <div class="ai-confidence">
+
+                <span>
+                    AI Confidence
+                </span>
+
+                <strong>
+                    ${
+                        aiConfidence !== null
+                            ? `${aiConfidence.toFixed(1)}%`
+                            : "N/A"
+                    }
+                </strong>
+
+            </div>
+
+
+            ${
+                aiConfidence !== null
+                    ? `
+
+                        <div class="ai-confidence-track">
+
+                            <div
+                                class="ai-confidence-fill"
+                                style="
+                                    width:${Math.min(
+                                        Math.max(
+                                            aiConfidence,
+                                            0
+                                        ),
+                                        100
+                                    )}%
+                                "
+                            ></div>
+
+                        </div>
+
+                    `
+                    : ""
+            }
+
+        </div>
+
+
+        <!-- SOIL CONDITION SCORE -->
+
         <div class="soil-core">
 
             <div class="soil-core-head">
 
                 <span class="label">
-                    Soil Health
+                    Soil Condition Score
                 </span>
 
                 <span class="score">
@@ -1374,7 +1887,11 @@ function renderNodeCard(
 
         score,
 
-        status
+        status,
+
+        aiPrediction: aiStatus,
+
+        aiConfidence
 
     };
 
@@ -1382,100 +1899,7 @@ function renderNodeCard(
 
 
 /* ================================================================
-   11. AI RESULT HELPERS
-================================================================ */
-
-function getAIStatusClass(
-    prediction
-) {
-
-    if (!prediction) {
-
-        return "attention";
-
-    }
-
-
-    const value =
-        String(
-            prediction
-        ).toLowerCase();
-
-
-    if (
-        value === "healthy"
-    ) {
-
-        return "healthy";
-
-    }
-
-
-    if (
-        value === "moderate"
-    ) {
-
-        return "moderate";
-
-    }
-
-
-    return "attention";
-
-}
-
-
-function getAIStatusText(
-    prediction
-) {
-
-    if (!prediction) {
-
-        return "AI Unavailable";
-
-    }
-
-
-    return String(
-        prediction
-    );
-
-}
-
-
-/*
-   Format AI confidence.
-
-   Backend returns confidence as a percentage,
-   e.g. 69.5.
-*/
-
-function formatAIConfidence(
-    confidence
-) {
-
-    if (
-        confidence === null ||
-        confidence === undefined ||
-        Number.isNaN(
-            Number(confidence)
-        )
-    ) {
-
-        return "--";
-
-    }
-
-
-    return `${Number(
-        confidence
-    ).toFixed(1)}%`;
-
-}
-
-
-/* ================================================================
-   12. RECOMMENDATION RENDERER
+   17. RECOMMENDATION RENDERER
 ================================================================ */
 
 function renderRecommendation(
@@ -1495,19 +1919,18 @@ function renderRecommendation(
 
 
     /*
-       Existing rule-based recommendation.
+       IMPORTANT:
+       aiResult is passed correctly here.
+       This fixes the previous bug where
+       aiPrediction was referenced before declaration.
     */
 
-    const action =
+    const recommendation =
         generateRecommendation(
             nodeData,
-            status
+            aiResult
         );
 
-
-    /*
-       AI result.
-    */
 
     const aiPrediction =
         aiResult
@@ -1517,7 +1940,9 @@ function renderRecommendation(
 
     const aiConfidence =
         aiResult
-            ? aiResult.confidence
+            ? safeNumber(
+                aiResult.confidence
+            )
             : null;
 
 
@@ -1531,6 +1956,44 @@ function renderRecommendation(
         getAIStatusText(
             aiPrediction
         );
+
+
+    const npkDeficiencies =
+        analyzeNPK(
+            nodeData
+        );
+
+
+    let fertilizerSection =
+        "";
+
+
+    if (
+        npkDeficiencies.length > 0
+    ) {
+
+        fertilizerSection = `
+
+            <p class="rc-action">
+
+                <strong>
+                    Fertilizer focus:
+                </strong>
+
+                ${npkDeficiencies
+                    .map(
+                        deficiency =>
+                            `${deficiency.nutrient} ` +
+                            `(${deficiency.value.toFixed(0)} mg/kg)`
+                    )
+                    .join(", ")
+                }
+
+            </p>
+
+        `;
+
+    }
 
 
     return `
@@ -1549,10 +2012,6 @@ function renderRecommendation(
                 </p>
 
 
-                <!-- =================================================
-                     AI SOIL HEALTH RESULT
-                ================================================== -->
-
                 <p class="rc-action">
 
                     <strong>
@@ -1562,7 +2021,9 @@ function renderRecommendation(
                     <span
                         class="node-badge status-${aiStatusClass}"
                     >
+
                         ${aiStatusText}
+
                     </span>
 
                 </p>
@@ -1581,26 +2042,47 @@ function renderRecommendation(
                 </p>
 
 
-                <!-- =================================================
-                     EXISTING RECOMMENDATION
-                ================================================== -->
-
                 <p class="rc-action">
 
                     <strong>
                         Recommendation:
                     </strong>
 
-                    ${action}
+                    ${recommendation.text}
 
                 </p>
 
 
+                ${
+                    recommendation.aiContext
+                        ? `
+
+                            <p class="rc-action">
+
+                                <strong>
+                                    AI Analysis:
+                                </strong>
+
+                                ${recommendation.aiContext}
+
+                            </p>
+
+                        `
+                        : ""
+                }
+
+
+                ${fertilizerSection}
+
+
                 <span class="rc-status">
-                    ${aiResult
-                        ? "AI Analysis Available"
-                        : "AI Analysis Unavailable"
+
+                    ${
+                        aiResult
+                            ? "AI Analysis Available"
+                            : "AI Analysis Unavailable"
                     }
+
                 </span>
 
             </div>
@@ -1613,7 +2095,7 @@ function renderRecommendation(
 
 
 /* ================================================================
-   13. NPK RENDERER
+   18. NPK RENDERER
 ================================================================ */
 
 function renderNPK(
@@ -1658,18 +2140,20 @@ function renderNPK(
             nutrient => {
 
                 const v1 =
-                    Number(
+                    safeNumber(
                         data.node1[
                             nutrient.key
-                        ]
+                        ],
+                        0
                     );
 
 
                 const v2 =
-                    Number(
+                    safeNumber(
                         data.node2[
                             nutrient.key
-                        ]
+                        ],
+                        0
                     );
 
 
@@ -1714,7 +2198,6 @@ function renderNPK(
 
                         <div class="npk-bars">
 
-
                             <div class="npk-bar-line">
 
                                 <span class="node-key">
@@ -1731,7 +2214,7 @@ function renderNPK(
                                 </span>
 
                                 <span class="npk-bar-value">
-                                    ${v1}
+                                    ${v1.toFixed(0)}
                                 </span>
 
                             </div>
@@ -1753,11 +2236,10 @@ function renderNPK(
                                 </span>
 
                                 <span class="npk-bar-value">
-                                    ${v2}
+                                    ${v2.toFixed(0)}
                                 </span>
 
                             </div>
-
 
                         </div>
 
@@ -1772,7 +2254,7 @@ function renderNPK(
 
 
 /* ================================================================
-   14. ALERT RENDERER
+   19. ALERT RENDERER
 ================================================================ */
 
 function renderAlerts(
@@ -1780,7 +2262,9 @@ function renderAlerts(
 ) {
 
     const alerts =
-        generateAlerts(data);
+        generateAlerts(
+            data
+        );
 
 
     const list =
@@ -1839,7 +2323,7 @@ function renderAlerts(
 
 
 /* ================================================================
-   15. NODE COMPARISON TABLE
+   20. NODE COMPARISON TABLE
 ================================================================ */
 
 function renderComparison(
@@ -1932,7 +2416,7 @@ function renderComparison(
             row => {
 
                 const node1Value =
-                    Number(
+                    safeNumber(
                         data.node1[
                             row.key
                         ]
@@ -1940,11 +2424,48 @@ function renderComparison(
 
 
                 const node2Value =
-                    Number(
+                    safeNumber(
                         data.node2[
                             row.key
                         ]
                     );
+
+
+                const formatComparisonValue =
+                    value => {
+
+                        if (
+                            value === null
+                        ) {
+
+                            return "--";
+
+                        }
+
+
+                        if (
+
+                            row.key ===
+                            "soilTemperature" &&
+
+                            value ===
+                            INVALID_SOIL_TEMPERATURE
+
+                        ) {
+
+                            return "N/A";
+
+                        }
+
+
+                        return (
+                            value.toFixed(
+                                row.decimals
+                            ) +
+                            row.unit
+                        );
+
+                    };
 
 
                 return `
@@ -1956,41 +2477,15 @@ function renderComparison(
                         </td>
 
                         <td>
-
-                            ${
-                                Number.isNaN(
-                                    node1Value
-                                )
-
-                                ? "--"
-
-                                :
-
-                                node1Value.toFixed(
-                                    row.decimals
-                                ) +
-                                row.unit
-                            }
-
+                            ${formatComparisonValue(
+                                node1Value
+                            )}
                         </td>
 
                         <td>
-
-                            ${
-                                Number.isNaN(
-                                    node2Value
-                                )
-
-                                ? "--"
-
-                                :
-
-                                node2Value.toFixed(
-                                    row.decimals
-                                ) +
-                                row.unit
-                            }
-
+                            ${formatComparisonValue(
+                                node2Value
+                            )}
                         </td>
 
                     </tr>
@@ -2004,7 +2499,515 @@ function renderComparison(
 
 
 /* ================================================================
-   16. GATEWAY CONNECTION STATUS
+   21. FARM SUMMARY
+================================================================ */
+
+function renderFarmSummary(
+    node1Result,
+    node2Result
+) {
+
+    const farmScore =
+        computeFarmHealthScore([
+
+            node1Result,
+
+            node2Result
+
+        ]);
+
+
+    const farmStatus =
+        getFarmStatus(
+            farmScore
+        );
+
+
+    /*
+       If an existing farm-summary element exists,
+       update it.
+
+       Otherwise we don't modify the existing HTML.
+    */
+
+    const element =
+        document.getElementById(
+            "farmHealthSummary"
+        );
+
+
+    if (!element) {
+
+        return {
+
+            score: farmScore,
+
+            status: farmStatus
+
+        };
+
+    }
+
+
+    element.innerHTML = `
+
+        <div class="farm-health-summary">
+
+            <span>
+                Farm Health
+            </span>
+
+            <strong>
+                ${farmScore}/100
+            </strong>
+
+            <span>
+                ${farmStatus}
+            </span>
+
+        </div>
+
+    `;
+
+
+    return {
+
+        score: farmScore,
+
+        status: farmStatus
+
+    };
+
+}
+
+
+/* ================================================================
+   22. LOCAL HISTORY
+================================================================ */
+
+function loadHistory() {
+
+    try {
+
+        const stored =
+            localStorage.getItem(
+                HISTORY_STORAGE_KEY
+            );
+
+
+        if (!stored) {
+
+            return [];
+
+        }
+
+
+        const history =
+            JSON.parse(
+                stored
+            );
+
+
+        return Array.isArray(
+            history
+        )
+            ? history
+            : [];
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Could not load history:",
+            error
+        );
+
+
+        return [];
+
+    }
+
+}
+
+
+function saveHistory(
+    history
+) {
+
+    try {
+
+        localStorage.setItem(
+
+            HISTORY_STORAGE_KEY,
+
+            JSON.stringify(
+                history
+            )
+
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Could not save history:",
+            error
+        );
+
+    }
+
+}
+
+
+function addHistoryPoint(
+    data,
+    node1Result,
+    node2Result
+) {
+
+    const history =
+        loadHistory();
+
+
+    const point = {
+
+        timestamp:
+            new Date().toISOString(),
+
+        node1: {
+
+            moisture:
+                safeNumber(
+                    data.node1.moisture
+                ),
+
+            pH:
+                safeNumber(
+                    data.node1.pH
+                ),
+
+            nitrogen:
+                safeNumber(
+                    data.node1.nitrogen
+                ),
+
+            phosphorus:
+                safeNumber(
+                    data.node1.phosphorus
+                ),
+
+            potassium:
+                safeNumber(
+                    data.node1.potassium
+                ),
+
+            score:
+                node1Result.score
+
+        },
+
+        node2: {
+
+            moisture:
+                safeNumber(
+                    data.node2.moisture
+                ),
+
+            pH:
+                safeNumber(
+                    data.node2.pH
+                ),
+
+            nitrogen:
+                safeNumber(
+                    data.node2.nitrogen
+                ),
+
+            phosphorus:
+                safeNumber(
+                    data.node2.phosphorus
+                ),
+
+            potassium:
+                safeNumber(
+                    data.node2.potassium
+                ),
+
+            score:
+                node2Result.score
+
+        }
+
+    };
+
+
+    /*
+       Don't add another history point if the previous
+       point was created less than 30 seconds ago.
+    */
+
+    const last =
+        history[
+            history.length - 1
+        ];
+
+
+    if (last) {
+
+        const elapsed =
+            Date.now() -
+            new Date(
+                last.timestamp
+            ).getTime();
+
+
+        if (
+            elapsed < 30000
+        ) {
+
+            return history;
+
+        }
+
+    }
+
+
+    history.push(
+        point
+    );
+
+
+    /*
+       Keep only the most recent points.
+    */
+
+    while (
+        history.length >
+        MAX_HISTORY_POINTS
+    ) {
+
+        history.shift();
+
+    }
+
+
+    saveHistory(
+        history
+    );
+
+
+    return history;
+
+}
+
+
+/* ================================================================
+   23. TREND ANALYSIS
+================================================================ */
+
+function calculateTrend(
+    history,
+    nodeKey,
+    parameter
+) {
+
+    if (
+        history.length < 2
+    ) {
+
+        return "Not enough data";
+
+    }
+
+
+    const values =
+        history
+            .map(
+                point =>
+                    point[
+                        nodeKey
+                    ]?.[
+                        parameter
+                    ]
+            )
+            .filter(
+                value =>
+                    Number.isFinite(
+                        value
+                    )
+            );
+
+
+    if (
+        values.length < 2
+    ) {
+
+        return "Not enough data";
+
+    }
+
+
+    const first =
+        values[0];
+
+
+    const last =
+        values[
+            values.length - 1
+        ];
+
+
+    const difference =
+        last -
+        first;
+
+
+    if (
+        Math.abs(
+            difference
+        ) < 1
+    ) {
+
+        return "Stable";
+
+    }
+
+
+    return difference > 0
+        ? "Increasing"
+        : "Decreasing";
+
+}
+
+
+/* ================================================================
+   24. TREND DISPLAY
+================================================================ */
+
+function renderTrends(
+    history
+) {
+
+    const container =
+        document.getElementById(
+            "trendPanel"
+        );
+
+
+    /*
+       If the HTML doesn't currently contain trendPanel,
+       don't break the dashboard.
+    */
+
+    if (!container) {
+
+        return;
+
+    }
+
+
+    const node1MoistureTrend =
+        calculateTrend(
+            history,
+            "node1",
+            "moisture"
+        );
+
+
+    const node2MoistureTrend =
+        calculateTrend(
+            history,
+            "node2",
+            "moisture"
+        );
+
+
+    const node1ScoreTrend =
+        calculateTrend(
+            history,
+            "node1",
+            "score"
+        );
+
+
+    const node2ScoreTrend =
+        calculateTrend(
+            history,
+            "node2",
+            "score"
+        );
+
+
+    container.innerHTML = `
+
+        <div class="trend-grid">
+
+            <div class="trend-card">
+
+                <strong>
+                    Node 1 Moisture
+                </strong>
+
+                <span>
+                    ${node1MoistureTrend}
+                </span>
+
+            </div>
+
+
+            <div class="trend-card">
+
+                <strong>
+                    Node 2 Moisture
+                </strong>
+
+                <span>
+                    ${node2MoistureTrend}
+                </span>
+
+            </div>
+
+
+            <div class="trend-card">
+
+                <strong>
+                    Node 1 Health
+                </strong>
+
+                <span>
+                    ${node1ScoreTrend}
+                </span>
+
+            </div>
+
+
+            <div class="trend-card">
+
+                <strong>
+                    Node 2 Health
+                </strong>
+
+                <span>
+                    ${node2ScoreTrend}
+                </span>
+
+            </div>
+
+        </div>
+
+        <small>
+            Based on ${history.length} stored readings.
+        </small>
+
+    `;
+
+}
+
+
+/* ================================================================
+   25. GATEWAY CONNECTION STATUS
 ================================================================ */
 
 function setGatewayStatus(
@@ -2055,39 +3058,7 @@ function setGatewayStatus(
 
 
 /* ================================================================
-   17. LAST UPDATED TIME
-================================================================ */
-
-function updateLastUpdatedTime() {
-
-    const element =
-        document.getElementById(
-            "lastUpdated"
-        );
-
-
-    if (!element) {
-
-        return;
-
-    }
-
-
-    element.textContent =
-        new Date().toLocaleTimeString(
-            [],
-            {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            }
-        );
-
-}
-
-
-/* ================================================================
-   18. OPTIONAL LIVE CONNECTION INDICATOR
+   26. CONNECTION STATUS
 ================================================================ */
 
 function updateConnectionStatus(
@@ -2149,7 +3120,39 @@ function updateConnectionStatus(
 
 
 /* ================================================================
-   19. MAIN DASHBOARD UPDATE
+   27. LAST UPDATED
+================================================================ */
+
+function updateLastUpdatedTime() {
+
+    const element =
+        document.getElementById(
+            "lastUpdated"
+        );
+
+
+    if (!element) {
+
+        return;
+
+    }
+
+
+    element.textContent =
+        new Date().toLocaleTimeString(
+            [],
+            {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            }
+        );
+
+}
+
+
+/* ================================================================
+   28. MAIN DASHBOARD UPDATE
 ================================================================ */
 
 async function updateDashboard() {
@@ -2158,14 +3161,13 @@ async function updateDashboard() {
 
         /*
            =========================================================
-           STEP 1 — GET LIVE SENSOR DATA
+           STEP 1
+           GET LIVE SENSOR DATA
            =========================================================
         */
 
-        const data = await fetchFarmData();
-
-        const aiNode1 = await fetchAIPrediction(1);
-        const aiNode2 = await fetchAIPrediction(2);
+        const data =
+            await fetchFarmData();
 
 
         console.log(
@@ -2176,7 +3178,29 @@ async function updateDashboard() {
 
         /*
            =========================================================
-           STEP 2 — GET AI PREDICTIONS
+           VALIDATE DATA
+           =========================================================
+        */
+
+        if (
+            !data ||
+            !data.node1 ||
+            !data.node2
+        ) {
+
+            throw new Error(
+                "Backend did not return both node1 and node2 data."
+            );
+
+        }
+
+
+        /*
+           =========================================================
+           STEP 2
+           GET BOTH AI PREDICTIONS
+
+           This replaces the previous duplicate API calls.
            =========================================================
         */
 
@@ -2192,33 +3216,69 @@ async function updateDashboard() {
 
         /*
            =========================================================
-           STEP 3 — NODE 1
+           STEP 3
+           RENDER NODE 1
            =========================================================
         */
 
         const node1Result =
             renderNodeCard(
+
                 "node1",
-                data.node1
+
+                data.node1,
+
+                aiResults.node1
+
             );
 
 
         /*
            =========================================================
-           STEP 4 — NODE 2
+           STEP 4
+           RENDER NODE 2
            =========================================================
         */
 
         const node2Result =
             renderNodeCard(
+
                 "node2",
-                data.node2
+
+                data.node2,
+
+                aiResults.node2
+
             );
 
 
         /*
            =========================================================
-           STEP 5 — AI + FERTILIZER RECOMMENDATIONS
+           STEP 5
+           FARM HEALTH
+           =========================================================
+        */
+
+        const farmResult =
+            renderFarmSummary(
+
+                node1Result,
+
+                node2Result
+
+            );
+
+
+        console.log(
+            "Farm health:",
+            farmResult
+        );
+
+
+        /*
+           =========================================================
+           STEP 6
+           RECOMMENDATIONS
            =========================================================
         */
 
@@ -2228,7 +3288,9 @@ async function updateDashboard() {
             );
 
 
-        if (recommendations) {
+        if (
+            recommendations
+        ) {
 
             recommendations.innerHTML =
 
@@ -2260,19 +3322,11 @@ async function updateDashboard() {
 
         }
 
-        else {
-
-            console.error(
-                "Could not find element with " +
-                "id='recommendGrid'"
-            );
-
-        }
-
 
         /*
            =========================================================
-           STEP 6 — NPK
+           STEP 7
+           NPK
            =========================================================
         */
 
@@ -2283,7 +3337,8 @@ async function updateDashboard() {
 
         /*
            =========================================================
-           STEP 7 — ALERTS
+           STEP 8
+           ALERTS
            =========================================================
         */
 
@@ -2294,7 +3349,8 @@ async function updateDashboard() {
 
         /*
            =========================================================
-           STEP 8 — COMPARISON
+           STEP 9
+           COMPARISON
            =========================================================
         */
 
@@ -2305,7 +3361,32 @@ async function updateDashboard() {
 
         /*
            =========================================================
-           STEP 9 — CONNECTION STATUS
+           STEP 10
+           HISTORY
+           =========================================================
+        */
+
+        const history =
+            addHistoryPoint(
+
+                data,
+
+                node1Result,
+
+                node2Result
+
+            );
+
+
+        renderTrends(
+            history
+        );
+
+
+        /*
+           =========================================================
+           STEP 11
+           CONNECTION STATUS
            =========================================================
         */
 
@@ -2352,34 +3433,32 @@ async function updateDashboard() {
 
 
 /* ================================================================
-   20. INITIALIZATION + AUTOMATIC REFRESH
+   29. INITIALIZATION
 ================================================================ */
 
 document.addEventListener(
     "DOMContentLoaded",
     () => {
 
+        console.log(
+            "Smart Farm Dashboard initialized."
+        );
+
+
         /*
-           Initial load.
+           Initial update.
         */
 
         updateDashboard();
 
 
         /*
-           Refresh every 5 seconds.
-
-           This means:
-           - sensor values update
-           - AI predictions update
-           - recommendations update
-           - alerts update
-           - NPK comparison updates
+           Automatic refresh.
         */
 
         setInterval(
             updateDashboard,
-            5000
+            REFRESH_INTERVAL
         );
 
     }
