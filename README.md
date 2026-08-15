@@ -114,20 +114,24 @@ The dashboard displays live readings, AI prediction, confidence, soil score, ale
 ## 🏗️ System Architecture
 
 ```mermaid
-flowchart TB
-    subgraph FARM["FARM FIELD"]
-        N1["Node 1<br/>ESP32 + Sensors"]
-        N2["Node 2<br/>ESP32 + Sensors"]
-        GW["Gateway<br/>ESP32"]
-    end
-    N1 -->|"ESP-NOW"| GW
-    N2 -->|"ESP-NOW"| GW
-    GW -->|"Wi-Fi / Internet"| TB["ThingsBoard Cloud"]
-    TB -->|"REST API"| API["FastAPI Backend"]
-    API --> ML["Random Forest<br/>ML Model"]
-    API --> RE["Recommendation /<br/>Decision Engine"]
-    ML --> DASH["Web Dashboard"]
-    RE --> DASH
+flowchart TD
+    N1["Node 1 ESP32"]
+    N2["Node 2 ESP32"]
+    GW["ESP32 Gateway"]
+    TB["ThingsBoard Cloud"]
+    API["FastAPI Backend"]
+    ML["Random Forest ML Model"]
+    REC["Recommendation Engine"]
+    UI["Web Dashboard"]
+
+    N1 -->|ESP-NOW| GW
+    N2 -->|ESP-NOW| GW
+    GW -->|Wi-Fi| TB
+    TB -->|REST API| API
+    API --> ML
+    API --> REC
+    ML --> UI
+    REC --> UI
 ```
 
 ---
