@@ -240,22 +240,22 @@ airHumidity
 ```
 
 ```mermaid
-flowchart TB
+flowchart TD
     DATA["Live Sensor Data"]
     FEATURES["Nine Input Features"]
-    PROCESS["Feature Preparation"]
-    RF["Random Forest ML Model"]
-    P["Soil Health Prediction"]
-    C["Confidence Score"]
+    PREP["Feature Preparation"]
+    RF["Random Forest"]
+    PRED["Soil Health Prediction"]
+    CONF["Confidence Score"]
     OUT["AI Analysis"]
 
     DATA --> FEATURES
-    FEATURES --> PROCESS
-    PROCESS --> RF
-    RF --> P
-    RF --> C
-    P --> OUT
-    C --> OUT
+    FEATURES --> PREP
+    PREP --> RF
+    RF --> PRED
+    RF --> CONF
+    PRED --> OUT
+    CONF --> OUT
 ```
 
 ---
