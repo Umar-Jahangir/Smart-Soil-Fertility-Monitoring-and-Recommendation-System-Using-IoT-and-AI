@@ -1,144 +1,185 @@
-# 🌱 Smart Farm Soil Monitoring System
+# Smart Farm Soil Monitoring System
 
-## Real-Time Multi-Node Soil Health Monitoring, AI Analysis & Farm Recommendations
+## Real-Time Multi-Node Soil Health Monitoring and Recommendation System
 
-The **Smart Farm Soil Monitoring System** is an IoT + AI agricultural monitoring platform that monitors soil and environmental conditions at multiple locations in a farm.
+A multi-node IoT and AI-based smart farming system designed to monitor
+soil and environmental conditions at multiple locations in a farm,
+analyze the collected data using a Random Forest machine-learning model,
+and provide soil-health insights, alerts, and actionable recommendations
+through a web dashboard.
 
-It uses **ESP32 sensor nodes**, an **ESP32 gateway**, **ESP-NOW**, **Wi-Fi**, **ThingsBoard Cloud**, a **FastAPI backend**, and a **Random Forest ML model**.
+The system uses **ESP32 sensor nodes**, **ESP-NOW**, an **ESP32
+gateway**, **ThingsBoard Cloud**, a **FastAPI backend**, and a **Random
+Forest AI model**.
 
-### Monitored parameters
+------------------------------------------------------------------------
 
-- Soil moisture
-- Soil pH
-- Electrical Conductivity (EC)
-- Nitrogen (N)
-- Phosphorus (P)
-- Potassium (K)
-- Soil temperature
-- Air temperature
-- Air humidity
+## Table of Contents
 
-The complete pipeline is:
+-   [Project Overview](#project-overview)
+-   [Objectives](#objectives)
+-   [Key Features](#key-features)
+-   [System Architecture](#system-architecture)
+-   [Hardware Architecture](#hardware-architecture)
+-   [Communication Architecture](#communication-architecture)
+-   [Data Flow](#data-flow)
+-   [AI/ML Pipeline](#aiml-pipeline)
+-   [AI Decision and Recommendation](#ai-decision-and-recommendation)
+-   [ThingsBoard Architecture](#thingsboard-architecture)
+-   [Backend Architecture](#backend-architecture)
+-   [Dashboard Architecture](#dashboard-architecture)
+-   [Alert Generation](#alert-generation)
+-   [Historical AI Analysis](#historical-ai-analysis)
+-   [Node Comparison](#node-comparison)
+-   [Demo Scenario](#demo-scenario)
+-   [Parameters Monitored](#parameters-monitored)
+-   [Technology Stack](#technology-stack)
+-   [Project Development Phases](#project-development-phases)
+-   [Project Structure](#project-structure)
+-   [How the System Works](#how-the-system-works)
+-   [How to Run the Project](#how-to-run-the-project)
+-   [API Endpoints](#api-endpoints)
+-   [Example AI Output](#example-ai-output)
+-   [Future Scope](#future-scope)
 
-**Sensors → ESP32 Nodes → ESP-NOW → ESP32 Gateway → Wi-Fi → ThingsBoard → FastAPI → AI/Decision Engine → Dashboard**
+------------------------------------------------------------------------
 
----
+## Project Overview
 
-## 📌 Table of Contents
+Traditional soil monitoring often involves manually collecting soil
+samples and testing them separately. This project aims to automate
+continuous monitoring by deploying multiple ESP32-based sensor nodes at
+different locations in a farm.
 
-- [Problem Statement](#-problem-statement)
-- [Objectives](#-objectives)
-- [What the Project Does](#-what-the-project-does)
-- [System Architecture](#-system-architecture)
-- [Hardware Architecture](#-hardware-architecture)
-- [Communication Architecture](#-communication-architecture)
-- [Data Flow](#-data-flow)
-- [AI/ML Pipeline](#-aiml-pipeline)
-- [AI Decision and Recommendation](#-ai-decision-and-recommendation)
-- [ThingsBoard Architecture](#-thingsboard-architecture)
-- [Backend Architecture](#-backend-architecture)
-- [Dashboard Architecture](#-dashboard-architecture)
-- [Alert Generation](#-alert-generation)
-- [Historical AI Analysis](#-historical-ai-analysis)
-- [Node Comparison](#-node-comparison)
-- [Demo Scenario](#-demo-scenario)
-- [Development Phases](#-development-phases)
-- [Technology Stack](#-technology-stack)
-- [Project Structure](#-project-structure)
-- [How to Run](#-how-to-run)
-- [API Endpoints](#-api-endpoints)
-- [Future Scope](#-future-scope)
-- [Important Notes](#-important-notes)
+Each node collects soil and environmental parameters and sends the
+readings wirelessly to an ESP32 gateway using **ESP-NOW**. The gateway
+forwards the collected telemetry through Wi-Fi to **ThingsBoard Cloud**.
 
----
+The **FastAPI backend** retrieves the telemetry, prepares the required
+features, sends them to the **Random Forest model**, and combines the AI
+prediction with a condition-based recommendation engine.
 
-## 🎯 Problem Statement
+The resulting information is displayed on a web dashboard where the user
+can:
 
-Soil conditions can vary considerably between different locations in the same farm. Manual measurement is periodic and makes it difficult to continuously monitor these variations.
+-   Monitor multiple nodes in real time.
+-   View soil and environmental parameters.
+-   View AI soil-health classification.
+-   View AI confidence.
+-   View soil condition score.
+-   Compare Node 1 and Node 2.
+-   View NPK values.
+-   Receive dynamically generated alerts.
+-   View fertilizer/soil-management recommendations.
+-   View historical AI predictions.
 
-This project provides a multi-node system that:
+------------------------------------------------------------------------
 
-1. Collects soil and environmental data automatically.
-2. Transmits readings wirelessly.
-3. Sends telemetry to an IoT cloud.
-4. Retrieves live telemetry through a backend.
-5. Uses ML for soil-health classification.
-6. Generates confidence scores.
-7. Detects abnormal conditions.
-8. Generates recommendations and alerts.
-9. Maintains AI history.
-10. Compares different farm locations.
+## Objectives
 
----
+1.  Monitor soil conditions at multiple locations.
+2.  Collect soil and environmental parameters using ESP32 sensor nodes.
+3.  Establish wireless communication between sensor nodes and gateway.
+4.  Send telemetry to a cloud platform.
+5.  Analyze sensor data using machine learning.
+6.  Classify soil health.
+7.  Generate actionable recommendations.
+8.  Detect abnormal or critical soil conditions.
+9.  Maintain historical AI analysis.
+10. Provide a centralized web dashboard for farm monitoring.
 
-## 🎯 Objectives
+------------------------------------------------------------------------
 
-- Build a multi-node ESP32 monitoring system.
-- Use ESP-NOW for node-to-gateway communication.
-- Use Wi-Fi for cloud connectivity.
-- Integrate ThingsBoard.
-- Develop a FastAPI backend.
-- Integrate a Random Forest model.
-- Generate AI confidence where supported.
-- Generate recommendations and alerts.
-- Compare Node 1 and Node 2.
-- Maintain historical AI analysis.
-- Provide a real-time dashboard.
+## Key Features
 
----
+### Multi-Node Monitoring
 
-## 🔍 What the Project Does
+The prototype uses:
 
-Each node collects the following values:
+-   Node 1
+-   Node 2
+-   ESP32 Gateway
 
-| Parameter | Unit |
-|---|---|
-| Soil Moisture | % |
-| Air Temperature | °C |
-| Air Humidity | % |
-| Soil Temperature | °C |
-| Soil pH | pH |
-| EC | dS/m |
-| Nitrogen | mg/kg |
-| Phosphorus | mg/kg |
-| Potassium | mg/kg |
+Each node represents a different monitored area of the farm.
 
-The gateway receives node data using ESP-NOW and forwards telemetry to ThingsBoard using Wi-Fi.
+### Real-Time Telemetry
 
-The FastAPI backend retrieves telemetry, normalizes it, sends the nine features to the Random Forest model, and combines the AI result with condition checks to produce useful recommendations.
+The system monitors:
 
-The dashboard displays live readings, AI prediction, confidence, soil score, alerts, recommendations, NPK comparison, farm comparison and AI history.
+-   Soil moisture
+-   Soil pH
+-   Electrical conductivity
+-   Nitrogen
+-   Phosphorus
+-   Potassium
+-   Soil temperature
+-   Air temperature
+-   Air humidity
 
----
+### AI Soil Health Classification
 
-## 🏗️ System Architecture
+A Random Forest model processes the sensor features and produces:
 
-```mermaid
-flowchart TD
-    N1["Node 1 ESP32"]
-    N2["Node 2 ESP32"]
-    GW["ESP32 Gateway"]
-    TB["ThingsBoard Cloud"]
-    API["FastAPI Backend"]
-    ML["Random Forest ML Model"]
-    REC["Recommendation Engine"]
-    UI["Web Dashboard"]
+-   Soil health prediction
+-   Confidence score
 
-    N1 -->|ESP-NOW| GW
-    N2 -->|ESP-NOW| GW
-    GW -->|Wi-Fi| TB
-    TB -->|REST API| API
-    API --> ML
-    API --> REC
-    ML --> UI
-    REC --> UI
+### Recommendation Engine
+
+The recommendation layer examines field conditions and generates actions
+such as:
+
+-   Irrigation recommended
+-   Correct soil alkalinity
+-   Other condition-specific recommendations
+
+### Alerts
+
+The dashboard dynamically displays alerts when monitored parameters fall
+outside the configured target ranges.
+
+### Historical Analysis
+
+AI predictions are recorded with information such as:
+
+-   Timestamp
+-   Node
+-   Prediction
+-   Confidence
+-   Priority
+-   Action
+-   Reason
+-   Issue count
+
+------------------------------------------------------------------------
+
+# System Architecture
+
+``` mermaid
+flowchart TB
+    subgraph FARM["FARM FIELD"]
+        N1["Node 1<br/>ESP32 + Sensors"]
+        N2["Node 2<br/>ESP32 + Sensors"]
+        GW["Gateway<br/>ESP32"]
+    end
+
+    N1 -->|"ESP-NOW"| GW
+    N2 -->|"ESP-NOW"| GW
+    GW -->|"Wi-Fi / Internet"| TB["ThingsBoard Cloud"]
+    TB -->|"REST API"| API["FastAPI Backend"]
+    API --> ML["Random Forest<br/>ML Model"]
+    API --> RE["Recommendation /<br/>Decision Engine"]
+    ML --> DASH["Web Dashboard"]
+    RE --> DASH
 ```
 
----
+------------------------------------------------------------------------
 
-## 🔌 Hardware Architecture
+# Hardware Architecture
 
-```mermaid
+Each sensor node is built around an ESP32 and is intended to monitor
+soil and environmental parameters.
+
+``` mermaid
 flowchart TB
     N1["NODE 1<br/>ESP32"]
     M1["Soil Moisture"]
@@ -147,6 +188,7 @@ flowchart TB
     NPK1["NPK"]
     D1["DHT22<br/>Air Temp + Humidity"]
     S1["DS18B20<br/>Soil Temp"]
+
     N1 --> M1
     N1 --> PH1
     N1 --> EC1
@@ -161,6 +203,7 @@ flowchart TB
     NPK2["NPK"]
     D2["DHT22<br/>Air Temp + Humidity"]
     S2["DS18B20<br/>Soil Temp"]
+
     N2 --> M2
     N2 --> PH2
     N2 --> EC2
@@ -169,11 +212,11 @@ flowchart TB
     N2 --> S2
 ```
 
----
+------------------------------------------------------------------------
 
-## 📡 Communication Architecture
+# Communication Architecture
 
-```mermaid
+``` mermaid
 flowchart LR
     N1["Node 1 ESP32"]
     N2["Node 2 ESP32"]
@@ -189,45 +232,51 @@ flowchart LR
     API -->|"HTTP / JSON"| UI
 ```
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| Node → Gateway | ESP-NOW | Local wireless communication |
-| Gateway → Cloud | Wi-Fi | Internet connectivity |
-| ThingsBoard → Backend | REST API | Telemetry retrieval |
-| Backend → Dashboard | HTTP/JSON | Application data |
+  Layer                   Technology    Purpose
+  ----------------------- ------------- ------------------------------
+  Node → Gateway          ESP-NOW       Local wireless communication
+  Gateway → Cloud         Wi-Fi         Internet connectivity
+  ThingsBoard → Backend   REST API      Telemetry retrieval
+  Backend → Dashboard     HTTP / JSON   Application data delivery
 
----
+------------------------------------------------------------------------
 
-## 🔄 Data Flow
+# Data Flow
 
-```mermaid
-flowchart TB
-    S["Soil & Environmental Sensors"]
-    N["ESP32 Nodes"]
+``` mermaid
+flowchart TD
+    S["Soil and Environmental Sensors"]
+    N["ESP32 Sensor Nodes"]
     G["ESP32 Gateway"]
     T["ThingsBoard Cloud"]
     F["FastAPI Backend"]
-    ML["Random Forest"]
-    R["Recommendation / Alert Engine"]
+    ML["Random Forest Model"]
+    R["Recommendation Engine"]
     D["Web Dashboard"]
 
-    S -->|"Measurements"| N
+    S --> N
     N -->|"ESP-NOW"| G
     G -->|"Wi-Fi"| T
-    T -->|"Telemetry"| F
+    T -->|"REST API"| F
     F --> ML
     F --> R
     ML --> D
     R --> D
 ```
 
----
+The complete data path is:
 
-## 🤖 AI/ML Pipeline
+**Sensors → ESP32 Nodes → ESP-NOW → ESP32 Gateway → Wi-Fi → ThingsBoard
+→ FastAPI → AI/Recommendation Engine → Dashboard**
 
-The model uses these features in this exact order:
+------------------------------------------------------------------------
 
-```text
+# AI/ML Pipeline
+
+The Random Forest model uses the following nine input features in this
+exact order:
+
+``` text
 moisture
 pH
 EC
@@ -239,7 +288,7 @@ airTemperature
 airHumidity
 ```
 
-```mermaid
+``` mermaid
 flowchart TD
     DATA["Live Sensor Data"]
     FEATURES["Nine Input Features"]
@@ -258,13 +307,18 @@ flowchart TD
     CONF --> OUT
 ```
 
----
+The model receives the prepared sensor features and produces a
+soil-health classification along with a confidence value.
 
-## 🧠 AI Decision and Recommendation
+------------------------------------------------------------------------
 
-The ML model classifies soil health; the condition/recommendation layer checks field parameters and produces actionable guidance.
+# AI Decision and Recommendation
 
-```mermaid
+The ML model classifies soil health. A separate
+condition-analysis/recommendation layer checks important field
+parameters and generates actionable guidance.
+
+``` mermaid
 flowchart TD
     LIVE["Live Sensor Data"]
     RF["Random Forest"]
@@ -286,23 +340,31 @@ flowchart TD
     NPK --> REC
 ```
 
-Example:
+### Example
 
-```text
+``` text
 Moisture = 0%
-    ↓
+        ↓
 Below target range
-    ↓
+        ↓
 HIGH priority
-    ↓
+        ↓
 Irrigation recommended
 ```
 
----
+This separates **AI classification** from **condition-based
+recommendations**. The AI model determines the soil-health class, while
+the recommendation layer interprets critical field conditions and
+suggests an action.
 
-## ☁️ ThingsBoard Architecture
+------------------------------------------------------------------------
 
-```mermaid
+# ThingsBoard Architecture
+
+ThingsBoard acts as the cloud telemetry layer between the ESP32 gateway
+and the backend.
+
+``` mermaid
 flowchart TD
     GW["ESP32 Gateway"]
     TB["ThingsBoard Cloud"]
@@ -312,18 +374,18 @@ flowchart TD
     T2["Node 2 Telemetry"]
     API["FastAPI Backend"]
 
-    GW -->|Wi-Fi| TB
+    GW -->|"Wi-Fi"| TB
     TB --> D1
     TB --> D2
     D1 --> T1
     D2 --> T2
-    T1 -->|REST API| API
-    T2 -->|REST API| API
+    T1 -->|"REST API"| API
+    T2 -->|"REST API"| API
 ```
 
-Expected telemetry keys:
+### Expected Telemetry Keys
 
-```text
+``` text
 moisture
 airTemperature
 airHumidity
@@ -335,11 +397,14 @@ phosphorus
 potassium
 ```
 
----
+------------------------------------------------------------------------
 
-## ⚙️ Backend Architecture
+# Backend Architecture
 
-```mermaid
+The backend is implemented using FastAPI and provides APIs for farm
+data, AI prediction, live node analysis, and historical AI analysis.
+
+``` mermaid
 flowchart TD
     TB["ThingsBoard"]
     API["FastAPI Backend"]
@@ -369,11 +434,13 @@ flowchart TD
     DEC --> UI
 ```
 
----
+------------------------------------------------------------------------
 
-## 🖥️ Dashboard Architecture
+# Dashboard Architecture
 
-```mermaid
+The dashboard provides a centralized view of the farm.
+
+``` mermaid
 flowchart TB
     DASH["SMART FARM DASHBOARD"]
     NODE["Node Monitoring"]
@@ -399,11 +466,24 @@ flowchart TB
     HIST --> H["Historical Predictions"]
 ```
 
----
+The dashboard includes:
 
-## 🚨 Alert Generation
+-   Node overview
+-   Live sensor readings
+-   AI soil-health prediction
+-   AI confidence
+-   Soil condition score
+-   Fertilizer/soil recommendations
+-   NPK visualization
+-   Dynamic alerts
+-   Farm comparison
+-   Historical AI analysis
 
-```mermaid
+------------------------------------------------------------------------
+
+# Alert Generation
+
+``` mermaid
 flowchart TB
     DATA["Live Telemetry"]
     CHECK["Threshold / Condition Check"]
@@ -431,11 +511,21 @@ flowchart TB
     ACTION --> UI
 ```
 
----
+The alert system evaluates the live telemetry against configured
+conditions.
 
-## 🕒 Historical AI Analysis
+For example:
 
-```mermaid
+-   Very low soil moisture → irrigation alert
+-   High soil pH → soil alkalinity alert
+
+------------------------------------------------------------------------
+
+# Historical AI Analysis
+
+Every AI analysis can be recorded for later inspection.
+
+``` mermaid
 flowchart TB
     LIVE["Live Sensor Data"]
     PRED["AI Prediction"]
@@ -453,27 +543,29 @@ flowchart TB
 
 A history record contains information such as:
 
-- Timestamp
-- Node
-- Prediction
-- Confidence
-- Priority
-- Action
-- Reason
-- Issue count
+-   Timestamp
+-   Node
+-   Prediction
+-   Confidence
+-   Priority
+-   Action
+-   Reason
+-   Issue count
 
-Endpoints:
+### History Endpoints
 
-```text
+``` text
 GET /api/ai/history/1
 GET /api/ai/history/2
 ```
 
----
+------------------------------------------------------------------------
 
-## 📊 Node Comparison
+# Node Comparison
 
-```mermaid
+The system can compare different monitored areas of the same farm.
+
+``` mermaid
 flowchart TB
     FARM["Farm Analysis"]
     N1["Node 1"]
@@ -500,13 +592,20 @@ flowchart TB
     COMP --> NPK
 ```
 
-The comparison allows the system to identify that different areas of the same farm may require different actions.
+This is important because different areas of the same farm may have
+different soil conditions.
 
----
+For example, one area may have sufficient moisture while another area
+may be completely dry. The system can therefore provide **node-specific
+recommendations rather than one recommendation for the entire farm**.
 
-## 🎬 Demo Scenario
+------------------------------------------------------------------------
 
-```mermaid
+# Demo Scenario
+
+The prototype demonstrates different soil conditions at the two nodes.
+
+``` mermaid
 flowchart TB
     FARM["LIVE FARM"]
     N1["NODE 1"]
@@ -533,385 +632,654 @@ flowchart TB
     AI --> DASH
 ```
 
-Example demonstrated outputs:
+During demonstration, Node 2 can be placed in dry soil to demonstrate
+the system's response to extremely low soil moisture.
 
-**Node 1**
+The current example behavior is:
 
-```text
-pH = 9.15
-AI Prediction = Healthy
-Confidence = 71.5%
-Priority = HIGH
-Recommendation = Correct soil alkalinity
+### Node 1
+
+-   Soil pH ≈ 9.15
+-   AI prediction: Healthy
+-   AI confidence: 71.5%
+-   Recommendation: Correct soil alkalinity
+-   Priority: HIGH
+
+### Node 2
+
+-   Soil moisture = 0%
+-   AI prediction: Healthy
+-   AI confidence: 73.5%
+-   Recommendation: Irrigation recommended
+-   Priority: HIGH
+
+The important point is that **AI classification and field-condition
+recommendations are separate outputs**. A node can be classified as
+Healthy by the current model while still receiving a high-priority
+recommendation because a specific parameter requires attention.
+
+------------------------------------------------------------------------
+
+# Parameters Monitored
+
+  Parameter          Unit       Purpose
+  ------------------ ---------- ------------------------------------
+  Soil Moisture      \%         Determines soil water availability
+  Soil pH            pH scale   Indicates soil acidity/alkalinity
+  EC                 dS/m       Indicates electrical conductivity
+  Nitrogen           mg/kg      Nutrient monitoring
+  Phosphorus         mg/kg      Nutrient monitoring
+  Potassium          mg/kg      Nutrient monitoring
+  Soil Temperature   °C         Monitors soil thermal condition
+  Air Temperature    °C         Environmental monitoring
+  Air Humidity       \%         Environmental monitoring
+
+------------------------------------------------------------------------
+
+# Technology Stack
+
+## Hardware
+
+-   ESP32 × 3
+    -   Node 1
+    -   Node 2
+    -   Gateway
+-   Soil moisture sensors
+-   Soil pH sensors
+-   EC sensors
+-   NPK sensors
+-   DHT22
+-   DS18B20
+-   Breadboards
+-   Jumper wires
+
+## Communication
+
+-   ESP-NOW
+-   Wi-Fi
+
+## Cloud
+
+-   ThingsBoard Cloud
+
+## Backend
+
+-   Python
+-   FastAPI
+-   Uvicorn
+
+## Machine Learning
+
+-   Random Forest
+-   Python ML pipeline
+
+## Frontend
+
+-   HTML
+-   CSS
+-   JavaScript
+
+------------------------------------------------------------------------
+
+# Project Development Phases
+
+## Phase 1 --- Problem Identification
+
+The project started from the problem of manually monitoring soil
+conditions across different areas of a farm.
+
+The goal was to create a system capable of continuously collecting soil
+data and providing area-specific insights.
+
+------------------------------------------------------------------------
+
+## Phase 2 --- System Design
+
+A multi-node architecture was selected:
+
+``` text
+Node 1 ──┐
+         ├──> Gateway ──> Cloud ──> Backend ──> Dashboard
+Node 2 ──┘
 ```
 
-**Node 2**
+Using multiple nodes allows the system to monitor different areas
+independently.
 
-```text
-Moisture = 0.0%
-AI Prediction = Healthy
-Confidence = 73.5%
-Priority = HIGH
-Recommendation = Irrigation recommended
+------------------------------------------------------------------------
+
+## Phase 3 --- Hardware Setup
+
+ESP32 sensor nodes were assembled with sensors for:
+
+-   Moisture
+-   pH
+-   EC
+-   NPK
+-   Air temperature/humidity
+-   Soil temperature
+
+A separate ESP32 was configured as the gateway.
+
+------------------------------------------------------------------------
+
+## Phase 4 --- Node Programming
+
+Each ESP32 node was programmed to read its connected sensors and prepare
+the readings for transmission.
+
+The sensor nodes were configured to communicate with the gateway using
+ESP-NOW.
+
+------------------------------------------------------------------------
+
+## Phase 5 --- Gateway Communication
+
+The gateway receives readings from the sensor nodes and acts as the
+bridge between the local sensor network and the Internet.
+
+``` text
+Sensor Nodes
+     ↓
+ ESP-NOW
+     ↓
+ Gateway ESP32
+     ↓
+   Wi-Fi
 ```
 
----
+------------------------------------------------------------------------
 
-## 🛠️ Development Phases
+## Phase 6 --- Cloud Integration
 
-### Phase 1 — Project Definition
+ThingsBoard was introduced as the cloud telemetry platform.
 
-The project was defined as a multi-location farm monitoring system for soil and environmental conditions.
+The gateway forwards telemetry through Wi-Fi, allowing the sensor data
+to be stored and accessed by the backend.
 
-### Phase 2 — Sensor Nodes
+------------------------------------------------------------------------
 
-ESP32-based Node 1 and Node 2 were assembled and connected to soil/environmental sensors.
+## Phase 7 --- Backend Development
 
-### Phase 3 — Gateway
+A FastAPI backend was developed to:
 
-A third ESP32 was introduced as the gateway for the field nodes.
+-   Retrieve farm telemetry.
+-   Process node data.
+-   Provide API endpoints.
+-   Connect the live data with the AI pipeline.
+-   Generate recommendations.
+-   Maintain AI prediction history.
 
-### Phase 4 — ESP-NOW
+------------------------------------------------------------------------
 
-ESP-NOW was implemented for wireless Node → Gateway communication.
+## Phase 8 --- AI/ML Integration
 
-### Phase 5 — ThingsBoard
+The Random Forest model was integrated into the backend.
 
-ThingsBoard Cloud was introduced for device telemetry and cloud communication.
+The model receives nine features:
 
-### Phase 6 — FastAPI
-
-A FastAPI backend was developed to retrieve ThingsBoard telemetry and expose application APIs.
-
-### Phase 7 — Machine Learning
-
-The Random Forest model was integrated using:
-
-```text
-models/soil_health_model.pkl
+``` text
+moisture
+pH
+EC
+nitrogen
+phosphorus
+potassium
+soilTemperature
+airTemperature
+airHumidity
 ```
 
-The backend prepares the nine required features and obtains the prediction and confidence.
+It produces a soil-health prediction and confidence score.
 
-### Phase 8 — Recommendation and Alerts
+------------------------------------------------------------------------
 
-Condition-specific recommendations and dynamic alerts were added.
+## Phase 9 --- Recommendation Engine
 
-### Phase 9 — Dashboard
+The project then added a condition-analysis layer.
 
-A web dashboard was developed for live readings, AI analysis, recommendations and comparison.
+This layer checks important parameters and converts detected conditions
+into actionable recommendations.
 
-### Phase 10 — AI History
+Example:
 
-Historical prediction records were added for each node.
-
-### Phase 11 — Multi-Node Comparison
-
-Node 1 and Node 2 were integrated into the same dashboard for field-zone comparison.
-
-### Phase 12 — End-to-End Testing
-
-The final pipeline was verified from:
-
-```text
-Sensor
- → ESP32 Node
- → ESP-NOW
- → Gateway
- → Wi-Fi
- → ThingsBoard
- → FastAPI
- → Random Forest + Decision Engine
- → Dashboard
+``` text
+Moisture = 0%
+        ↓
+Below target range
+        ↓
+HIGH priority
+        ↓
+Irrigation recommended
 ```
 
----
+------------------------------------------------------------------------
 
-## 🧰 Technology Stack
+## Phase 10 --- Alert System
 
-### Hardware
+Dynamic alerts were added to make important conditions visible
+immediately on the dashboard.
 
-- ESP32 × 3
-- Soil moisture sensor
-- Soil pH sensor
-- EC sensor
-- NPK sensor
-- DHT22
-- DS18B20
-- Breadboard and jumper wires
+The alert engine evaluates conditions such as:
 
-### Software
+-   Low moisture
+-   High pH
+-   Other configured parameter limits
 
-- Arduino IDE
-- Python
-- FastAPI
-- Uvicorn
-- Requests
-- Pydantic
-- python-dotenv
-- Joblib
-- Scikit-learn
+------------------------------------------------------------------------
 
-### IoT / Cloud
+## Phase 11 --- Historical AI Analysis
 
-- ESP-NOW
-- Wi-Fi
-- ThingsBoard Cloud
+AI predictions were recorded so that the system could provide historical
+analysis for each node.
 
-### AI
+This makes it possible to inspect how the AI analysis changes over time.
 
-- Random Forest
-- Joblib model serialization
+------------------------------------------------------------------------
 
-### Frontend
+## Phase 12 --- Dashboard Development
 
-- HTML
-- CSS
-- JavaScript
+A web dashboard was developed to combine:
 
----
+-   Live telemetry
+-   AI predictions
+-   Confidence
+-   Soil score
+-   Recommendations
+-   Alerts
+-   NPK visualization
+-   Node comparison
+-   AI history
 
-## 📁 Project Structure
+------------------------------------------------------------------------
 
-A typical repository layout is:
+## Phase 13 --- Multi-Node Demonstration
 
-```text
-Smart-Farm-Soil-Monitoring/
-│
-├── backend/
-│   ├── app/
-│   │   └── ...
-│   ├── models/
-│   │   └── soil_health_model.pkl
-│   ├── .env
-│   ├── requirements.txt
-│   └── ...
-│
-├── frontend/
-│   ├── index.html
-│   ├── style.css
-│   ├── script.js
-│   └── ...
-│
-├── esp32/
-│   ├── node1/
-│   ├── node2/
-│   └── gateway/
-│
-└── README.md
+Node 1 and Node 2 were tested as separate field locations.
+
+The demo demonstrates that different nodes can produce different
+recommendations based on their local conditions.
+
+------------------------------------------------------------------------
+
+# How the System Works
+
+The complete execution sequence is:
+
+``` text
+1. Sensors collect readings
+          ↓
+2. ESP32 nodes process readings
+          ↓
+3. Nodes transmit data using ESP-NOW
+          ↓
+4. Gateway receives node data
+          ↓
+5. Gateway sends telemetry through Wi-Fi
+          ↓
+6. ThingsBoard receives cloud telemetry
+          ↓
+7. FastAPI retrieves telemetry
+          ↓
+8. Backend prepares AI features
+          ↓
+9. Random Forest predicts soil health
+          ↓
+10. Recommendation engine checks conditions
+          ↓
+11. Alerts and recommendations are generated
+          ↓
+12. Dashboard displays the results
+          ↓
+13. AI results are stored for historical analysis
 ```
 
-> Update this tree if the final repository uses different filenames/directories.
+------------------------------------------------------------------------
 
----
+# How to Run the Project
 
-## 🚀 How to Run
+## Prerequisites
 
-### 1. Clone
+Install the following:
 
-```bash
-git clone <YOUR_REPOSITORY_URL>
-cd <YOUR_REPOSITORY_DIRECTORY>
+-   Arduino IDE
+-   ESP32 board support
+-   Python 3.x
+-   Git
+-   A ThingsBoard Cloud account
+-   Wi-Fi connection
+
+------------------------------------------------------------------------
+
+## 1. Clone the Repository
+
+``` bash
+git clone <REPOSITORY_URL>
+cd Smart-Soil-Fertility-Monitoring-and-Recommendation-System-Using-IoT-and-AI
 ```
 
-### 2. Create a virtual environment
+------------------------------------------------------------------------
+
+## 2. Create a Python Virtual Environment
 
 Windows PowerShell:
 
-```powershell
-python -m venv venv
-.env\Scripts\Activate.ps1
+``` powershell
+python -m venv .venv
 ```
 
-Linux/macOS:
+Activate it:
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
+``` powershell
+.\.venv\Scripts\Activate.ps1
 ```
 
-### 3. Install dependencies
+If activation is blocked by PowerShell execution policy, use an
+appropriate PowerShell execution-policy setting or activate the
+environment through Command Prompt instead.
 
-```bash
+------------------------------------------------------------------------
+
+## 3. Install Backend Dependencies
+
+If the repository contains `requirements.txt`:
+
+``` powershell
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+If dependencies are managed differently in the repository, install the
+packages specified by the project's backend configuration.
 
-Create `backend/.env`:
+------------------------------------------------------------------------
 
-```env
-THINGSBOARD_URL=https://thingsboard.cloud
-THINGSBOARD_API_KEY=YOUR_THINGSBOARD_API_KEY
-NODE1_DEVICE_ID=YOUR_NODE1_DEVICE_ID
-NODE2_DEVICE_ID=YOUR_NODE2_DEVICE_ID
+## 4. Configure ThingsBoard
+
+Create/configure the required ThingsBoard devices for the sensor nodes
+and obtain the required credentials/access details.
+
+Configure the gateway according to the project's ESP32 firmware.
+
+The telemetry keys expected by the backend are:
+
+``` text
+moisture
+airTemperature
+airHumidity
+soilTemperature
+pH
+EC
+nitrogen
+phosphorus
+potassium
 ```
 
-Never commit real credentials.
+------------------------------------------------------------------------
 
-### 5. Check the ML model
+## 5. Configure ESP32 Nodes
 
-Ensure:
+Open the corresponding ESP32 sketches in Arduino IDE.
 
-```text
-backend/models/soil_health_model.pkl
+Configure:
+
+-   ESP32 board
+-   Sensor pins
+-   Gateway MAC address
+-   Required Wi-Fi settings
+-   ThingsBoard/cloud configuration where applicable
+
+Upload the node firmware to:
+
+``` text
+Node 1 ESP32
+Node 2 ESP32
 ```
 
-exists.
+------------------------------------------------------------------------
 
-### 6. Configure and upload ESP32 firmware
+## 6. Configure the ESP32 Gateway
 
-Open the Node 1, Node 2 and Gateway sketches in Arduino IDE.
+Upload the gateway firmware to the gateway ESP32.
 
-Configure the appropriate:
+The gateway is responsible for receiving ESP-NOW messages from the nodes
+and forwarding the collected telemetry through Wi-Fi.
 
-- ESP32 board
-- COM port
-- Sensor pins
-- Wi-Fi credentials
-- Gateway MAC address
-- ThingsBoard credentials where required
+Make sure the gateway has the correct:
 
-Upload to all three ESP32 boards.
+-   Wi-Fi SSID
+-   Wi-Fi password
+-   ThingsBoard/cloud configuration
+-   Node communication configuration
 
-### 7. Start FastAPI
+------------------------------------------------------------------------
 
-From the backend directory:
+## 7. Start the FastAPI Backend
 
-```bash
+From the backend/project directory:
+
+``` powershell
 uvicorn app.main:app --reload
 ```
 
-Backend:
+The backend should normally become available at:
 
-```text
+``` text
 http://127.0.0.1:8000
 ```
 
-Swagger:
+FastAPI Swagger documentation:
 
-```text
+``` text
 http://127.0.0.1:8000/docs
 ```
 
-### 8. Test the API
+------------------------------------------------------------------------
 
-```text
-GET /api/health
-GET /api/farm-data
-GET /api/ai/predict/1
-GET /api/ai/predict/2
-GET /api/ai/history/1
-GET /api/ai/history/2
-```
+## 8. Start the Dashboard
 
-### 9. Start the frontend
+Open the project's frontend/dashboard according to the repository
+structure.
 
-For a static frontend, a simple local server can be used:
+If the dashboard is served directly as static HTML, open the relevant
+HTML page or serve the frontend using the project's configured frontend
+method.
 
-```bash
-python -m http.server 5500
-```
+Make sure the dashboard is configured to communicate with:
 
-Then open:
-
-```text
-http://127.0.0.1:5500
-```
-
-Make sure the frontend API base URL points to:
-
-```text
+``` text
 http://127.0.0.1:8000
 ```
 
----
+------------------------------------------------------------------------
 
-## 🔗 API Endpoints
+## 9. Verify the System
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/` | API status |
-| GET | `/api/health` | Backend/model health |
-| GET | `/api/farm-data` | Live Node 1 + Node 2 data |
-| POST | `/api/ai/predict` | Predict from supplied values |
-| GET | `/api/ai/predict/{node_id}` | Predict from live node |
-| GET | `/api/ai/history/{node_id}` | AI prediction history |
+Check the following sequence:
 
-Example manual prediction:
+``` text
+ESP32 Node 1
+      ↓
+ESP32 Node 2
+      ↓
+ESP32 Gateway
+      ↓
+ThingsBoard
+      ↓
+FastAPI
+      ↓
+Random Forest
+      ↓
+Recommendation Engine
+      ↓
+Dashboard
+```
 
-```json
+Then verify:
+
+-   Node 1 is visible.
+-   Node 2 is visible.
+-   Sensor readings are updating.
+-   ThingsBoard telemetry is updating.
+-   AI predictions are generated.
+-   Recommendations are generated.
+-   Alerts appear when conditions cross thresholds.
+-   AI history endpoints return records.
+
+------------------------------------------------------------------------
+
+# API Endpoints
+
+The backend exposes APIs for different parts of the application.
+
+### AI History --- Node 1
+
+``` http
+GET /api/ai/history/1
+```
+
+### AI History --- Node 2
+
+``` http
+GET /api/ai/history/2
+```
+
+Example response structure:
+
+``` json
 {
-  "moisture": 61,
-  "pH": 6.8,
-  "EC": 1.35,
-  "nitrogen": 48,
-  "phosphorus": 32,
-  "potassium": 41,
-  "soilTemperature": 23.8,
-  "airTemperature": 25.1,
-  "airHumidity": 87.4
+  "node": "Node 2",
+  "count": 50,
+  "history": [
+    {
+      "timestamp": "2026-08-16T00:04:41.190434",
+      "node": "Node 2",
+      "prediction": "Healthy",
+      "confidence": 73.5,
+      "priority": "HIGH",
+      "action": "Irrigation recommended",
+      "reason": "Soil moisture is 0.0%, which is below the target range.",
+      "issueCount": 1
+    }
+  ]
 }
 ```
 
----
+------------------------------------------------------------------------
 
-## 🚀 Future Scope
+# Example AI Output
 
-- More ESP32 sensor nodes
-- Automated irrigation using relay/pump control
-- Crop-specific recommendations
-- Fertilizer optimization
-- Yield prediction
-- Time-series soil analysis
-- Seasonal trend analysis
-- Mobile application
-- Improved ML models such as XGBoost or neural networks
-- Long-term farm-zone analytics
+## Node 1
 
----
+``` text
+AI Soil Health: Healthy
+AI Confidence: 71.5%
 
-## ⚠️ Important Notes
+Soil pH: 9.15
 
-### Sensor Calibration
+Priority: HIGH
 
-For real agricultural deployment, sensors should be properly calibrated. Soil pH, EC, moisture and NPK readings depend on sensor type, soil characteristics and calibration.
+Recommendation:
+Correct soil alkalinity
 
-### ML Model Limitations
-
-Model performance depends on the quality and representativeness of its training dataset. A production deployment should include diverse soil types, crops, environmental conditions and geographically representative data.
-
-### Security
-
-Never commit:
-
-```text
-.env
-Wi-Fi passwords
-ThingsBoard API keys
-private device credentials
+Reason:
+Soil pH is above the target range.
 ```
 
-Use environment variables or a proper secret-management solution.
+## Node 2
 
----
+``` text
+AI Soil Health: Healthy
+AI Confidence: 73.5%
 
-## 🌱 Project Summary
+Soil Moisture: 0%
 
-The Smart Farm Soil Monitoring System combines **IoT sensing, wireless communication, cloud telemetry, backend APIs, machine learning, rule-based analysis and visualization** into a single agricultural monitoring platform.
+Priority: HIGH
 
-Its key workflow is:
+Recommendation:
+Irrigation recommended
 
-> **Monitor → Analyze → Recommend**
+Reason:
+Soil moisture is below the target range.
+```
 
-Instead of only displaying raw sensor readings, the system attempts to turn those readings into location-specific information that can help a farmer identify soil conditions requiring attention.
+------------------------------------------------------------------------
 
----
+# Important Design Principle
 
-## 👥 Project
+The system deliberately separates two concepts:
 
-**Smart Farm Soil Monitoring System**
+### 1. AI Soil Health Classification
 
-**Real-Time Multi-Node Soil Health Monitoring**
+The Random Forest model determines the predicted soil-health class and
+confidence.
 
-**Monitor → Analyze → Recommend**
+### 2. Condition-Based Recommendation
+
+The recommendation layer examines important field parameters and
+determines whether an action is required.
+
+Therefore:
+
+``` text
+AI Prediction
+      +
+Field Condition Analysis
+      ↓
+Actionable Recommendation
+```
+
+This allows the dashboard to communicate both the model's classification
+and practical field-management actions.
+
+------------------------------------------------------------------------
+
+# Future Scope
+
+The current prototype can be extended with:
+
+-   More sensor nodes
+-   Larger farm coverage
+-   Automated irrigation control
+-   Automated fertilizer dosing
+-   Crop-specific recommendation models
+-   Historical trend visualization
+-   Weather API integration
+-   Yield prediction
+-   Soil-health forecasting
+-   Mobile application
+-   Role-based access control
+-   Advanced time-series models
+-   Edge AI
+-   Solar-powered sensor nodes
+-   GPS-based farm mapping
+-   Geospatial soil-health visualization
+
+------------------------------------------------------------------------
+
+# Project Summary
+
+The **Smart Farm Soil Monitoring System** combines IoT, wireless sensor
+networking, cloud telemetry, backend APIs, machine learning, and a web
+dashboard into a multi-node smart agriculture platform.
+
+The system continuously collects soil and environmental data from
+multiple farm locations, transfers the readings through an ESP32
+gateway, stores/serves telemetry through ThingsBoard, analyzes the data
+using a Random Forest model, and generates condition-specific
+recommendations and alerts.
+
+The core workflow is:
+
+``` text
+MONITOR
+   ↓
+ANALYZE
+   ↓
+RECOMMEND
+   ↓
+ACT
+```
+
+The prototype demonstrates how multiple areas of a farm can be monitored
+independently and how the resulting data can be converted into
+AI-assisted, actionable soil-management information.
