@@ -303,20 +303,22 @@ Irrigation recommended
 ## ☁️ ThingsBoard Architecture
 
 ```mermaid
-flowchart TB
+flowchart TD
     GW["ESP32 Gateway"]
     TB["ThingsBoard Cloud"]
     D1["Node 1 Device"]
     D2["Node 2 Device"]
-    TEL["Telemetry"]
+    T1["Node 1 Telemetry"]
+    T2["Node 2 Telemetry"]
     API["FastAPI Backend"]
 
-    GW -->|"Wi-Fi"| TB
+    GW -->|Wi-Fi| TB
     TB --> D1
     TB --> D2
-    D1 --> TEL
-    D2 --> TEL
-    TEL -->|"REST API"| API
+    D1 --> T1
+    D2 --> T2
+    T1 -->|REST API| API
+    T2 -->|REST API| API
 ```
 
 Expected telemetry keys:
