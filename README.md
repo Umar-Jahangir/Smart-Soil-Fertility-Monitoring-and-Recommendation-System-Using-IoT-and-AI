@@ -340,25 +340,28 @@ potassium
 ## ⚙️ Backend Architecture
 
 ```mermaid
-flowchart TB
+flowchart TD
     TB["ThingsBoard"]
-    API["FastAPI API"]
+    API["FastAPI Backend"]
     FARM["Farm Data API"]
     PRED["AI Prediction API"]
     LIVE["Live Node Prediction"]
     HIST["AI History API"]
     ML["Random Forest"]
-    DEC["Recommendation / Alert Logic"]
+    DEC["Recommendation Engine"]
     UI["Web Dashboard"]
 
     TB --> API
+
     API --> FARM
     API --> PRED
     API --> LIVE
     API --> HIST
+    API --> DEC
+
     PRED --> ML
     LIVE --> ML
-    API --> DEC
+
     FARM --> UI
     PRED --> UI
     LIVE --> UI
